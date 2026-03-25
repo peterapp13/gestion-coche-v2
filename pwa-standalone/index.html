@@ -13,6 +13,16 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Global Header with Vehicle Selector -->
+    <header class="app-header">
+        <h1 class="app-title">🚗 Mi Garaje</h1>
+        <div class="vehicle-selector-container" id="vehicle-selector-container">
+            <select class="vehicle-selector" id="vehicle-selector" onchange="changeVehicle()">
+                <option value="">Selecciona vehículo...</option>
+            </select>
+        </div>
+    </header>
+
     <!-- Navigation Tabs -->
     <nav class="bottom-nav">
         <button class="nav-btn active" data-tab="repostajes">
@@ -26,6 +36,10 @@
         <button class="nav-btn" data-tab="taller">
             <span class="icon">🔧</span>
             <span>Taller</span>
+        </button>
+        <button class="nav-btn" data-tab="vehiculos">
+            <span class="icon">🚙</span>
+            <span>Vehículos</span>
         </button>
         <button class="nav-btn" data-tab="estadisticas">
             <span class="icon">📈</span>
@@ -66,10 +80,26 @@
             <div id="taller-list" class="records-list"></div>
         </div>
 
+        <!-- Vehículos Tab -->
+        <div class="tab-content" id="vehiculos">
+            <div class="header">
+                <h1>🚙 Vehículos</h1>
+                <button class="btn-add" onclick="showVehiculoForm()">+</button>
+            </div>
+            <div id="vehiculos-list" class="records-list"></div>
+        </div>
+
         <!-- Estadísticas Tab -->
         <div class="tab-content" id="estadisticas">
             <div class="header">
                 <h1>📈 Estadísticas</h1>
+            </div>
+            <div class="stats-controls">
+                <label class="toggle-label">Vista de Combustible:</label>
+                <div class="toggle-buttons">
+                    <button class="toggle-btn active" data-view="mensual" onclick="changeStatsView('mensual')">Mensual</button>
+                    <button class="toggle-btn" data-view="anual" onclick="changeStatsView('anual')">Anual</button>
+                </div>
             </div>
             <div id="estadisticas-content" class="stats-container"></div>
         </div>
@@ -85,8 +115,15 @@
                     <p>Descarga todos tus datos en formato CSV compatible con Excel y Google Sheets</p>
                     <button class="btn-export" onclick="exportToCSV()">📥 Descargar CSV</button>
                 </div>
+                
+                <div class="export-card danger-zone">
+                    <h2>⚠️ Zona Peligrosa</h2>
+                    <p>Esta acción eliminará TODOS los datos de la aplicación de forma permanente</p>
+                    <button class="btn-danger" onclick="confirmReset()">🗑️ Borrar Todo</button>
+                </div>
+                
                 <div class="stats-card">
-                    <h3>Estadísticas</h3>
+                    <h3>Estadísticas Generales</h3>
                     <div id="stats-content"></div>
                 </div>
             </div>

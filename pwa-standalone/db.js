@@ -1,6 +1,6 @@
 // IndexedDB Setup
 const DB_NAME = 'VehiculoDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented version for new collection
 let db;
 
 // Initialize Database
@@ -18,6 +18,9 @@ function initDB() {
             db = event.target.result;
             
             // Create object stores
+            if (!db.objectStoreNames.contains('vehiculos')) {
+                db.createObjectStore('vehiculos', { keyPath: 'id', autoIncrement: true });
+            }
             if (!db.objectStoreNames.contains('repostajes')) {
                 db.createObjectStore('repostajes', { keyPath: 'id', autoIncrement: true });
             }
@@ -84,5 +87,26 @@ function getRecord(storeName, id) {
         
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
+    });
+}
+
+// Clear all data
+function clearAllData() {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const stores = ['vehiculos', 'repostajes', 'almacen', 'taller'];
+            for (const storeName of stores) {
+                const transaction = db.transaction([storeName], 'readwrite');
+                const store = transaction.objectStore(storeName);
+                await new Promise((res, rej) => {
+                    const request = store.clear();
+                    request.onsuccess = () => res();
+                    request.onerror = () => rej(request.error);
+                });
+            }
+            resolve();
+        } catch (error) {
+            reject(error);
+        }
     });
 }

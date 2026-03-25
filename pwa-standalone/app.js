@@ -1,10 +1,20 @@
 // App State
 let currentTab = 'repostajes';
 let editingId = null;
+let activeVehicle = null; // Currently selected vehicle
+let statsView = 'mensual'; // 'mensual' or 'anual'
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', async () => {
     await initDB();
+    
+    // Load active vehicle from localStorage
+    const savedVehicle = localStorage.getItem('activeVehicle');
+    if (savedVehicle) {
+        activeVehicle = savedVehicle;
+    }
+    
+    await loadVehicles();
     setupNavigation();
     await loadAllData();
     updateStats();

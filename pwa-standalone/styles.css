@@ -8,8 +8,48 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     background: #0A0A0A;
     color: #FFFFFF;
+    padding-top: 70px;
     padding-bottom: 70px;
     -webkit-font-smoothing: antialiased;
+}
+
+/* App Header */
+.app-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #1A1A1A;
+    border-bottom: 1px solid #2A2A2A;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 999;
+}
+
+.app-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #FFFFFF;
+    margin: 0;
+}
+
+.vehicle-selector-container {
+    flex: 1;
+    max-width: 250px;
+    margin-left: 16px;
+}
+
+.vehicle-selector {
+    width: 100%;
+    padding: 8px 12px;
+    background: #0A0A0A;
+    border: 1px solid #2A2A2A;
+    border-radius: 8px;
+    color: #FFFFFF;
+    font-size: 14px;
+    min-height: 40px;
 }
 
 .bottom-nav {
@@ -461,6 +501,73 @@ body {
 .stats-table .highlight-value {
     color: #4285F4;
     font-weight: 600;
+}
+
+/* Stats Controls */
+.stats-controls {
+    background: #1A1A1A;
+    border: 1px solid #2A2A2A;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.toggle-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFFFFF;
+    margin-bottom: 12px;
+}
+
+.toggle-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 12px;
+    background: #0A0A0A;
+    border: 1px solid #2A2A2A;
+    border-radius: 8px;
+    color: #9CA3AF;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 48px;
+}
+
+.toggle-btn.active {
+    background: #4285F4;
+    color: #FFFFFF;
+    border-color: #4285F4;
+}
+
+/* Danger Zone */
+.danger-zone {
+    border-color: #EF4444 !important;
+}
+
+.danger-zone h2 {
+    color: #EF4444;
+}
+
+.btn-danger {
+    width: 100%;
+    padding: 16px;
+    background: #EF4444;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 56px;
+}
+
+.btn-danger:hover {
+    background: #DC2626;
 }
 
 @media (min-width: 768px) {
