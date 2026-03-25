@@ -512,13 +512,20 @@ async function loadTaller() {
 }
 
 async function showTallerForm(id = null) {
+    if (!activeVehicle) {
+        alert('Por favor, selecciona un vehículo primero');
+        return;
+    }
+    
     editingId = id;
     const title = id ? 'Editar Trabajo' : 'Nuevo Trabajo';
     
-    // Get available parts from Almacén with stock > 0
+    // Get available parts from Almacén FILTERED BY ACTIVE VEHICLE with stock > 0
     const almacenItems = await getAllRecords('almacen');
     const availableParts = almacenItems.filter(item => 
-        item.cantidad_comprada > 0 && item.estado === 'En Stock'
+        item.matricula === activeVehicle && 
+        item.cantidad_comprada > 0 && 
+        item.estado === 'En Stock'
     );
     
     if (id) {
@@ -673,50 +680,127 @@ async function deleteTaller(id) {
 
 // ===== ESTADÍSTICAS =====
 async function loadEstadisticas() {
-    const repostajes = await getAllRecords('repostajes');
-    const almacen = await getAllRecords('almacen');
+    if (!activeVehicle) {
+        const container = document.getElementById('estadisticas-content');
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚗</div>
+                <div class="empty-state-text">No hay vehículo seleccionado</div>
+                <div class="empty-state-subtext">Selecciona un vehículo para ver estadísticas</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const allRepostajes = await getAllRecords('repostajes');
+    const allAlmacen = await getAllRecords('almacen');
+    
+    // Filter by active vehicle
+    const repostajes = allRepostajes.filter(r => r.matricula === activeVehicle);
+    const almacen = allAlmacen.filter(a => a.matricula === activeVehicle);
     
     const container = document.getElementById('estadisticas-content');
     
-    // Fuel Statistics by Year/Month
-    const fuelStats = {};
-    repostajes.forEach(r => {
-        const date = new Date(r.fecha);
-        const year = date.getFullYear();
-        const month = date.getMonth() + 1;
-        const key = `${year}-${month.toString().padStart(2, '0')}`;
+    // Fuel Statistics
+    let fuelTableRows = '';
+    
+    if (statsView === 'mensual') {
+        // MENSUAL VIEW: Current year grouped by month
+        const currentYear = new Date().getFullYear();
+        const fuelStats = {};
         
-        if (!fuelStats[key]) {
-            fuelStats[key] = {
-                year,
-                month,
-                litros: 0,
-                coste: 0,
-                count: 0
-            };
-        }
+        repostajes.forEach(r => {
+            const date = new Date(r.fecha);
+            const year = date.getFullYear();
+            
+            // Only current year
+            if (year === currentYear) {
+                const month = date.getMonth() + 1;
+                const key = `${year}-${month.toString().padStart(2, '0')}`;
+                
+                if (!fuelStats[key]) {
+                    fuelStats[key] = {
+                        year,
+                        month,
+                        litros: 0,
+                        coste: 0,
+                        count: 0
+                    };
+                }
+                
+                fuelStats[key].litros += r.litros;
+                fuelStats[key].coste += r.total_euros;
+                fuelStats[key].count += 1;
+            }
+        });
         
-        fuelStats[key].litros += r.litros;
-        fuelStats[key].coste += r.total_euros;
-        fuelStats[key].count += 1;
-    });
+        const fuelStatsArray = Object.values(fuelStats).sort((a, b) => b.month - a.month);
+        
+        fuelTableRows = fuelStatsArray.length > 0 ? fuelStatsArray.map(stat => `
+            <tr>
+                <td>${getMonthName(stat.month)}</td>
+                <td class="highlight-value">${stat.litros.toFixed(2)} L</td>
+                <td class="highlight-value">${stat.coste.toFixed(2)} €</td>
+                <td>${(stat.coste / stat.litros).toFixed(3)} €/L</td>
+            </tr>
+        `).join('') : '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">No hay datos para el año actual</td></tr>';
+        
+        var fuelTableHeader = `
+            <thead>
+                <tr>
+                    <th>Mes (${currentYear})</th>
+                    <th>Total Litros</th>
+                    <th>Coste Total</th>
+                    <th>Precio Medio/L</th>
+                </tr>
+            </thead>
+        `;
+        
+    } else {
+        // ANUAL VIEW: All years grouped by year (no month column)
+        const fuelStats = {};
+        
+        repostajes.forEach(r => {
+            const year = new Date(r.fecha).getFullYear();
+            
+            if (!fuelStats[year]) {
+                fuelStats[year] = {
+                    year,
+                    litros: 0,
+                    coste: 0,
+                    count: 0
+                };
+            }
+            
+            fuelStats[year].litros += r.litros;
+            fuelStats[year].coste += r.total_euros;
+            fuelStats[year].count += 1;
+        });
+        
+        const fuelStatsArray = Object.values(fuelStats).sort((a, b) => b.year - a.year);
+        
+        fuelTableRows = fuelStatsArray.length > 0 ? fuelStatsArray.map(stat => `
+            <tr>
+                <td>${stat.year}</td>
+                <td class="highlight-value">${stat.litros.toFixed(2)} L</td>
+                <td class="highlight-value">${stat.coste.toFixed(2)} €</td>
+                <td>${(stat.coste / stat.litros).toFixed(3)} €/L</td>
+            </tr>
+        `).join('') : '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">No hay datos de combustible</td></tr>';
+        
+        var fuelTableHeader = `
+            <thead>
+                <tr>
+                    <th>Año</th>
+                    <th>Total Litros</th>
+                    <th>Coste Total</th>
+                    <th>Precio Medio/L</th>
+                </tr>
+            </thead>
+        `;
+    }
     
-    const fuelStatsArray = Object.values(fuelStats).sort((a, b) => {
-        if (a.year !== b.year) return b.year - a.year;
-        return b.month - a.month;
-    });
-    
-    const fuelTableRows = fuelStatsArray.map(stat => `
-        <tr>
-            <td>${stat.year}</td>
-            <td>${getMonthName(stat.month)}</td>
-            <td class="highlight-value">${stat.litros.toFixed(2)} L</td>
-            <td class="highlight-value">${stat.coste.toFixed(2)} €</td>
-            <td>${(stat.coste / stat.litros).toFixed(3)} €/L</td>
-        </tr>
-    `).join('');
-    
-    // Annual Spending from Almacén
+    // Annual Spending from Almacén (always by year)
     const almacenStats = {};
     almacen.forEach(a => {
         const year = new Date(a.fecha_compra).getFullYear();
@@ -742,53 +826,41 @@ async function loadEstadisticas() {
         .sort((a, b) => b[0] - a[0])
         .map(([year, data]) => ({ year: parseInt(year), ...data }));
     
-    const almacenTableRows = almacenStatsArray.map(stat => `
+    const almacenTableRows = almacenStatsArray.length > 0 ? almacenStatsArray.map(stat => `
         <tr>
             <td>${stat.year}</td>
             <td class="highlight-value">${stat.partes.toFixed(2)} €</td>
             <td class="highlight-value">${stat.servicios.toFixed(2)} €</td>
             <td class="highlight-value">${stat.total.toFixed(2)} €</td>
         </tr>
-    `).join('');
+    `).join('') : '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">No hay datos de almacén</td></tr>';
     
     container.innerHTML = `
         <div class="stats-section">
-            <h2>📊 Resumen de Combustible</h2>
-            ${fuelStatsArray.length > 0 ? `
-                <table class="stats-table">
-                    <thead>
-                        <tr>
-                            <th>Año</th>
-                            <th>Mes</th>
-                            <th>Total Litros</th>
-                            <th>Coste Total</th>
-                            <th>Precio Medio/L</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${fuelTableRows}
-                    </tbody>
-                </table>
-            ` : '<p style="color: #9CA3AF;">No hay datos de combustible</p>'}
+            <h2>📊 Resumen de Combustible - ${statsView === 'mensual' ? 'Vista Mensual' : 'Vista Anual'}</h2>
+            <table class="stats-table">
+                ${fuelTableHeader}
+                <tbody>
+                    ${fuelTableRows}
+                </tbody>
+            </table>
         </div>
         
         <div class="stats-section">
             <h2>💰 Gasto Anual en Almacén</h2>
-            ${almacenStatsArray.length > 0 ? `
-                <table class="stats-table">
-                    <thead>
-                        <tr>
-                            <th>Año</th>
-                            <th>Recambios</th>
-                            <th>Servicios</th>
-                            <th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${almacenTableRows}
-                    </tbody>
-                </table>
-            ` : '<p style="color: #9CA3AF;">No hay datos de almacén</p>'}
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Año</th>
+                        <th>Recambios</th>
+                        <th>Servicios</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${almacenTableRows}
+                </tbody>
+            </table>
         </div>
     `;
 }
@@ -809,28 +881,28 @@ async function exportToCSV() {
     
     // Repostajes
     csv += 'REPOSTAJES\n';
-    csv += 'Nº Factura,Gasolinera,Fecha,KM Actuales,Autonomía Antes,Autonomía Después,Litros,Precio/L,Total €\n';
+    csv += 'Matrícula,Nº Factura,Gasolinera,Fecha,KM Actuales,Autonomía Antes,Autonomía Después,Litros,Precio/L,Total €\n';
     repostajes.forEach(r => {
-        csv += `${r.numero_factura},${r.gasolinera},${r.fecha},${r.km_actuales},${r.autonomia_antes},${r.autonomia_despues},${r.litros},${r.precio_litro},${r.total_euros}\n`;
+        csv += `${r.matricula || 'N/A'},${r.numero_factura},${r.gasolinera},${r.fecha},${r.km_actuales},${r.autonomia_antes},${r.autonomia_despues},${r.litros},${r.precio_litro},${r.total_euros}\n`;
     });
     
     csv += '\n\n';
     
     // Almacén
     csv += 'ALMACÉN\n';
-    csv += 'Fecha Compra,Recambio,Marca,Cantidad,Coste €,Estado\n';
+    csv += 'Matrícula,Fecha Compra,Recambio,Marca,Cantidad,Coste €,Estado\n';
     almacen.forEach(a => {
-        csv += `${a.fecha_compra},${a.recambio},${a.marca},${a.cantidad_comprada},${a.coste_euros},${a.estado}\n`;
+        csv += `${a.matricula || 'N/A'},${a.fecha_compra},${a.recambio},${a.marca},${a.cantidad_comprada},${a.coste_euros},${a.estado}\n`;
     });
     
     csv += '\n\n';
     
     // Taller
     csv += 'TALLER\n';
-    csv += 'Fecha Montaje,KM Montaje,Recambio Instalado,Cantidad Usada,Notas\n';
+    csv += 'Matrícula,Fecha Montaje,KM Montaje,Recambio Instalado,Cantidad Usada,Notas\n';
     taller.forEach(t => {
         const notas = (t.notas || '').replace(/,/g, ';');
-        csv += `${t.fecha_montaje},${t.km_montaje},${t.recambio_instalado},${t.cantidad_usada || ''},${notas}\n`;
+        csv += `${t.matricula || 'N/A'},${t.fecha_montaje},${t.km_montaje},${t.recambio_instalado},${t.cantidad_usada || ''},${notas}\n`;
     });
     
     // Download
@@ -838,16 +910,21 @@ async function exportToCSV() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `vehiculo_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `vehiculo_${activeVehicle || 'todos'}_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
 }
 
 // Stats
 async function updateStats() {
-    const repostajes = await getAllRecords('repostajes');
-    const almacen = await getAllRecords('almacen');
-    const taller = await getAllRecords('taller');
+    const allRepostajes = await getAllRecords('repostajes');
+    const allAlmacen = await getAllRecords('almacen');
+    const allTaller = await getAllRecords('taller');
+    
+    // Filter by active vehicle if one is selected
+    const repostajes = activeVehicle ? allRepostajes.filter(r => r.matricula === activeVehicle) : allRepostajes;
+    const almacen = activeVehicle ? allAlmacen.filter(a => a.matricula === activeVehicle) : allAlmacen;
+    const taller = activeVehicle ? allTaller.filter(t => t.matricula === activeVehicle) : allTaller;
     
     const statsContainer = document.getElementById('stats-content');
     statsContainer.innerHTML = `
