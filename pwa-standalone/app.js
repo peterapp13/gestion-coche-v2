@@ -228,10 +228,17 @@ function openRepostajeModal(title, data = {}) {
 
 async function saveRepostaje(event) {
     event.preventDefault();
+    
+    if (!activeVehicle) {
+        alert('Por favor, selecciona un vehículo primero');
+        return;
+    }
+    
     const form = event.target;
     const formData = new FormData(form);
     
     const data = {
+        matricula: activeVehicle, // BIND TO ACTIVE VEHICLE
         numero_factura: formData.get('numero_factura'),
         gasolinera: formData.get('gasolinera'),
         fecha: formData.get('fecha'),
@@ -271,12 +278,25 @@ async function deleteRepostaje(id) {
 
 // ===== ALMACÉN =====
 async function loadAlmacen() {
+    if (!activeVehicle) {
+        const container = document.getElementById('almacen-list');
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚗</div>
+                <div class="empty-state-text">No hay vehículo seleccionado</div>
+                <div class="empty-state-subtext">Selecciona un vehículo en el menú superior</div>
+            </div>
+        `;
+        return;
+    }
+    
     const records = await getAllRecords('almacen');
-    records.sort((a, b) => new Date(b.fecha_compra) - new Date(a.fecha_compra));
+    const vehicleRecords = records.filter(r => r.matricula === activeVehicle);
+    vehicleRecords.sort((a, b) => new Date(b.fecha_compra) - new Date(a.fecha_compra));
     
     const container = document.getElementById('almacen-list');
     
-    if (records.length === 0) {
+    if (vehicleRecords.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">📦</div>
@@ -287,7 +307,7 @@ async function loadAlmacen() {
         return;
     }
     
-    container.innerHTML = records.map(r => `
+    container.innerHTML = vehicleRecords.map(r => `
         <div class="record-card">
             <div class="record-header">
                 <div>
@@ -381,10 +401,17 @@ function openAlmacenModal(title, data = {}) {
 
 async function saveAlmacen(event) {
     event.preventDefault();
+    
+    if (!activeVehicle) {
+        alert('Por favor, selecciona un vehículo primero');
+        return;
+    }
+    
     const form = event.target;
     const formData = new FormData(form);
     
     const data = {
+        matricula: activeVehicle, // BIND TO ACTIVE VEHICLE
         fecha_compra: formData.get('fecha_compra'),
         recambio: formData.get('recambio'),
         marca: formData.get('marca'),
@@ -421,12 +448,25 @@ async function deleteAlmacen(id) {
 
 // ===== TALLER =====
 async function loadTaller() {
+    if (!activeVehicle) {
+        const container = document.getElementById('taller-list');
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚗</div>
+                <div class="empty-state-text">No hay vehículo seleccionado</div>
+                <div class="empty-state-subtext">Selecciona un vehículo en el menú superior</div>
+            </div>
+        `;
+        return;
+    }
+    
     const records = await getAllRecords('taller');
-    records.sort((a, b) => b.km_montaje - a.km_montaje);
+    const vehicleRecords = records.filter(r => r.matricula === activeVehicle);
+    vehicleRecords.sort((a, b) => b.km_montaje - a.km_montaje);
     
     const container = document.getElementById('taller-list');
     
-    if (records.length === 0) {
+    if (vehicleRecords.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🔧</div>
@@ -437,7 +477,7 @@ async function loadTaller() {
         return;
     }
     
-    container.innerHTML = records.map(r => `
+    container.innerHTML = vehicleRecords.map(r => `
         <div class="record-card">
             <div class="record-header">
                 <div>
@@ -550,6 +590,12 @@ function updateQuantityMax() {
 
 async function saveTaller(event) {
     event.preventDefault();
+    
+    if (!activeVehicle) {
+        alert('Por favor, selecciona un vehículo primero');
+        return;
+    }
+    
     const form = event.target;
     const formData = new FormData(form);
     
@@ -589,6 +635,7 @@ async function saveTaller(event) {
     }
     
     const data = {
+        matricula: activeVehicle, // BIND TO ACTIVE VEHICLE
         fecha_montaje: formData.get('fecha_montaje'),
         km_montaje: parseFloat(formData.get('km_montaje')),
         recambio_instalado: recambioNombre,
