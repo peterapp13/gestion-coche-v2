@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0A0A0A">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Gestión Vehículo">
+    <title>Gestión de Vehículo</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation Tabs -->
+    <nav class="bottom-nav">
+        <button class="nav-btn active" data-tab="repostajes">
+            <span class="icon">⛽</span>
+            <span>Repostajes</span>
+        </button>
+        <button class="nav-btn" data-tab="almacen">
+            <span class="icon">📦</span>
+            <span>Almacén</span>
+        </button>
+        <button class="nav-btn" data-tab="taller">
+            <span class="icon">🔧</span>
+            <span>Taller</span>
+        </button>
+        <button class="nav-btn" data-tab="export">
+            <span class="icon">📊</span>
+            <span>Exportar</span>
+        </button>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Repostajes Tab -->
+        <div class="tab-content active" id="repostajes">
+            <div class="header">
+                <h1>⛽ Repostajes</h1>
+                <button class="btn-add" onclick="showRepostajeForm()">+</button>
+            </div>
+            <div id="repostajes-list" class="records-list"></div>
+        </div>
+
+        <!-- Almacén Tab -->
+        <div class="tab-content" id="almacen">
+            <div class="header">
+                <h1>📦 Almacén</h1>
+                <button class="btn-add" onclick="showAlmacenForm()">+</button>
+            </div>
+            <div id="almacen-list" class="records-list"></div>
+        </div>
+
+        <!-- Taller Tab -->
+        <div class="tab-content" id="taller">
+            <div class="header">
+                <h1>🔧 Taller</h1>
+                <button class="btn-add" onclick="showTallerForm()">+</button>
+            </div>
+            <div id="taller-list" class="records-list"></div>
+        </div>
+
+        <!-- Export Tab -->
+        <div class="tab-content" id="export">
+            <div class="header">
+                <h1>📊 Exportar Datos</h1>
+            </div>
+            <div class="export-container">
+                <div class="export-card">
+                    <h2>Exportar a CSV/Excel</h2>
+                    <p>Descarga todos tus datos en formato CSV compatible con Excel y Google Sheets</p>
+                    <button class="btn-export" onclick="exportToCSV()">📥 Descargar CSV</button>
+                </div>
+                <div class="stats-card">
+                    <h3>Estadísticas</h3>
+                    <div id="stats-content"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Forms -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="app.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+</body>
+</html>
