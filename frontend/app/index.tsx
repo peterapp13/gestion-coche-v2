@@ -42,10 +42,20 @@ export default function LoginScreen() {
     try {
       setLoading(true);
       
-      // Get the current origin dynamically
-      const backendUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || '';
-      // For mobile, we redirect to a callback route that will handle the session_id
-      const redirectUrl = `${backendUrl}/auth-callback`;
+      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+      // Get the redirect URL dynamically
+      let redirectUrl: string;
+      
+      if (Platform.OS === 'web') {
+        // For web, MUST use window.location.origin directly (no env vars, no fallbacks)
+        redirectUrl = typeof window !== 'undefined' 
+          ? `${window.location.origin}/auth-callback`
+          : '/auth-callback';
+      } else {
+        // For mobile, use the backend URL for deep linking
+        const backendUrl = Constants.expoConfig?.extra?.EXPO_PUBLIC_BACKEND_URL || '';
+        redirectUrl = `${backendUrl}/auth-callback`;
+      }
       
       const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
       
