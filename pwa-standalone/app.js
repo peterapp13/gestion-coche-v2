@@ -16,9 +16,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await loadVehicles();
     setupNavigation();
-    await loadAllData();
-    updateStats();
-    loadEstadisticas();
+    
+    // Only load data if we have an active vehicle
+    if (activeVehicle) {
+        await loadAllData();
+        updateStats();
+        loadEstadisticas();
+    } else {
+        // Show welcome message for other tabs
+        showNoVehicleMessage();
+    }
 });
 
 // Navigation
@@ -59,25 +66,40 @@ async function loadAllData() {
 
 // ===== REPOSTAJES =====
 async function loadRepostajes() {
+    // Don't try to load if no active vehicle
+    if (!activeVehicle) {
+        const container = document.getElementById('repostajes-list');
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚗</div>
+                <div class="empty-state-text">No hay vehículo seleccionado</div>
+                <div class="empty-state-subtext">Selecciona un vehículo en el menú superior</div>
+            </div>
+        `;
+        return;
+    }
+    
     const records = await getAllRecords('repostajes');
-    records.sort((a, b) => b.km_actuales - a.km_actuales);
+    // Filter by active vehicle - but allow records without matricula for backward compatibility
+    const vehicleRecords = records.filter(r => !r.matricula || r.matricula === activeVehicle);
+    vehicleRecords.sort((a, b) => b.km_actuales - a.km_actuales);
     
     // Calculate KM gastados and consumo for each record
-    for (let i = 0; i < records.length; i++) {
-        if (i < records.length - 1) {
-            const current = records[i];
-            const previous = records[i + 1];
+    for (let i = 0; i < vehicleRecords.length; i++) {
+        if (i < vehicleRecords.length - 1) {
+            const current = vehicleRecords[i];
+            const previous = vehicleRecords[i + 1];
             const kmGastados = current.km_actuales - previous.km_actuales;
-            records[i].km_gastados = kmGastados;
+            vehicleRecords[i].km_gastados = kmGastados;
             if (kmGastados > 0) {
-                records[i].consumo = ((current.litros / kmGastados) * 100).toFixed(2);
+                vehicleRecords[i].consumo = ((current.litros / kmGastados) * 100).toFixed(2);
             }
         }
     }
     
     const container = document.getElementById('repostajes-list');
     
-    if (records.length === 0) {
+    if (vehicleRecords.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">⛽</div>
@@ -808,4 +830,289 @@ function closeModal() {
     const modal = document.getElementById('modal');
     modal.classList.remove('show');
     editingId = null;
+}
+
+// ===== NO VEHICLE STATE =====
+function showNoVehicleMessage() {
+    const tabs = ['repostajes', 'almacen', 'taller', 'estadisticas'];
+    tabs.forEach(tab => {
+        const container = document.getElementById(`${tab}-list`) || document.getElementById(`${tab}-content`);
+        if (container) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🚗</div>
+                    <div class="empty-state-text">No hay vehículo seleccionado</div>
+                    <div class="empty-state-subtext">Ve a la pestaña "Vehículos" para añadir tu primer vehículo</div>
+                </div>
+            `;
+        }
+    });
+}
+
+// ===== VEHÍCULOS =====
+async function loadVehicles() {
+    const vehicles = await getAllRecords('vehiculos');
+    const selector = document.getElementById('vehicle-selector');
+    
+    if (!selector) return; // Guard clause
+    
+    selector.innerHTML = '<option value="">Selecciona vehículo...</option>';
+    
+    if (vehicles.length === 0) {
+        // No vehicles yet - show helpful message
+        selector.innerHTML = '<option value="">Añade un vehículo primero</option>';
+        selector.disabled = true;
+    } else {
+        selector.disabled = false;
+        vehicles.forEach(v => {
+            const option = document.createElement('option');
+            option.value = v.matricula;
+            option.textContent = `${v.matricula} - ${v.marca} ${v.modelo}`;
+            if (v.matricula === activeVehicle) {
+                option.selected = true;
+            }
+            selector.appendChild(option);
+        });
+        
+        // Auto-select first vehicle if none selected
+        if (!activeVehicle && vehicles.length > 0) {
+            activeVehicle = vehicles[0].matricula;
+            localStorage.setItem('activeVehicle', activeVehicle);
+            selector.value = activeVehicle;
+            // Reload data with new active vehicle
+            await loadAllData();
+            updateStats();
+            loadEstadisticas();
+        }
+    }
+    
+    // Show vehicle list in Vehículos tab
+    const container = document.getElementById('vehiculos-list');
+    if (!container) return;
+    
+    if (vehicles.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚙</div>
+                <div class="empty-state-text">No hay vehículos registrados</div>
+                <div class="empty-state-subtext">Toca el botón + para añadir tu primer vehículo</div>
+            </div>
+        `;
+    } else {
+        container.innerHTML = vehicles.map(v => `
+            <div class="record-card">
+                <div class="record-header">
+                    <div>
+                        <div class="record-title">${v.marca} ${v.modelo}</div>
+                        <div class="record-subtitle">Matrícula: ${v.matricula}</div>
+                    </div>
+                    <div class="record-actions">
+                        <button class="btn-edit" onclick="editVehiculo(${v.id})">✏️</button>
+                        <button class="btn-delete" onclick="deleteVehiculo(${v.id})">🗑️</button>
+                    </div>
+                </div>
+                <div class="record-body">
+                    <div class="record-row">
+                        <span class="record-label">Motor:</span>
+                        <span class="record-value">${v.motor}</span>
+                    </div>
+                    <div class="record-row">
+                        <span class="record-label">CV:</span>
+                        <span class="record-value">${v.cv} CV</span>
+                    </div>
+                    <div class="record-row">
+                        <span class="record-label">Año:</span>
+                        <span class="record-value">${v.year}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+function changeVehicle() {
+    const selector = document.getElementById('vehicle-selector');
+    activeVehicle = selector.value;
+    
+    if (activeVehicle) {
+        localStorage.setItem('activeVehicle', activeVehicle);
+        loadAllData();
+        loadEstadisticas();
+        updateStats();
+    } else {
+        showNoVehicleMessage();
+    }
+}
+
+function showVehiculoForm(id = null) {
+    editingId = id;
+    const title = id ? 'Editar Vehículo' : 'Nuevo Vehículo';
+    
+    if (id) {
+        getRecord('vehiculos', id).then(record => {
+            openVehiculoModal(title, record);
+        });
+    } else {
+        openVehiculoModal(title);
+    }
+}
+
+function openVehiculoModal(title, data = {}) {
+    const modal = document.getElementById('modal');
+    const modalBody = document.getElementById('modal-body');
+    
+    modalBody.innerHTML = `
+        <h2 class="form-title">${title}</h2>
+        <form id="vehiculo-form" onsubmit="saveVehiculo(event)">
+            <div class="form-group">
+                <label class="form-label">Matrícula</label>
+                <input type="text" class="form-input" name="matricula" value="${data.matricula || ''}" 
+                    placeholder="1234ABC" required ${data.matricula ? 'readonly' : ''}>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Marca</label>
+                <input type="text" class="form-input" name="marca" value="${data.marca || ''}" 
+                    placeholder="Toyota, Ford, etc." required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Modelo</label>
+                <input type="text" class="form-input" name="modelo" value="${data.modelo || ''}" 
+                    placeholder="Corolla, Focus, etc." required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Motor</label>
+                <input type="text" class="form-input" name="motor" value="${data.motor || ''}" 
+                    placeholder="1.6 TDI, 2.0 VTEC, etc." required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">CV (Potencia)</label>
+                <input type="number" class="form-input" name="cv" value="${data.cv || ''}" 
+                    placeholder="150" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Año</label>
+                <input type="number" class="form-input" name="year" value="${data.year || new Date().getFullYear()}" 
+                    min="1900" max="${new Date().getFullYear() + 1}" required>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                <button type="submit" class="btn-primary">Guardar</button>
+            </div>
+        </form>
+    `;
+    
+    modal.classList.add('show');
+}
+
+async function saveVehiculo(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    const data = {
+        matricula: formData.get('matricula').toUpperCase().trim(),
+        marca: formData.get('marca'),
+        modelo: formData.get('modelo'),
+        motor: formData.get('motor'),
+        cv: parseInt(formData.get('cv')),
+        year: parseInt(formData.get('year'))
+    };
+    
+    try {
+        if (editingId) {
+            data.id = editingId;
+            await updateRecord('vehiculos', data);
+        } else {
+            await addRecord('vehiculos', data);
+            
+            // Auto-select this vehicle if it's the first one
+            const vehicles = await getAllRecords('vehiculos');
+            if (vehicles.length === 1 || !activeVehicle) {
+                activeVehicle = data.matricula;
+                localStorage.setItem('activeVehicle', activeVehicle);
+            }
+        }
+        
+        closeModal();
+        await loadVehicles();
+        
+        // Reload all data if this is now the active vehicle
+        if (activeVehicle === data.matricula) {
+            await loadAllData();
+            updateStats();
+            loadEstadisticas();
+        }
+    } catch (error) {
+        alert('Error al guardar vehículo: ' + error.message);
+    }
+}
+
+async function editVehiculo(id) {
+    showVehiculoForm(id);
+}
+
+async function deleteVehiculo(id) {
+    if (!confirm('⚠️ ¿Eliminar este vehículo?\n\nEsto NO eliminará los registros asociados, pero quedarán sin vehículo asignado.')) {
+        return;
+    }
+    
+    try {
+        const vehicle = await getRecord('vehiculos', id);
+        await deleteRecord('vehiculos', id);
+        
+        // If this was the active vehicle, clear it
+        if (activeVehicle === vehicle.matricula) {
+            activeVehicle = null;
+            localStorage.removeItem('activeVehicle');
+        }
+        
+        await loadVehicles();
+        
+        // Check if we have other vehicles
+        const vehicles = await getAllRecords('vehiculos');
+        if (vehicles.length > 0) {
+            // Auto-select first available vehicle
+            activeVehicle = vehicles[0].matricula;
+            localStorage.setItem('activeVehicle', activeVehicle);
+            await loadAllData();
+        } else {
+            showNoVehicleMessage();
+        }
+        
+        updateStats();
+        loadEstadisticas();
+    } catch (error) {
+        alert('Error al eliminar vehículo: ' + error.message);
+    }
+}
+
+// ===== STATS VIEW TOGGLE =====
+function changeStatsView(view) {
+    statsView = view;
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === view);
+    });
+    loadEstadisticas();
+}
+
+// ===== RESET FUNCTION =====
+async function confirmReset() {
+    if (!confirm('⚠️ ADVERTENCIA: Esto eliminará TODOS los datos de forma permanente.\n\n¿Estás seguro de continuar?')) {
+        return;
+    }
+    
+    if (!confirm('Última confirmación: ¿Realmente quieres borrar TODO (vehículos, repostajes, recambios, trabajos)?')) {
+        return;
+    }
+    
+    try {
+        await clearAllData();
+        localStorage.clear();
+        activeVehicle = null;
+        alert('✅ Todos los datos han sido eliminados');
+        location.reload();
+    } catch (error) {
+        alert('Error al borrar datos: ' + error.message);
+        console.error(error);
+    }
 }
