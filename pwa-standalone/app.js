@@ -3,6 +3,7 @@ let currentTab = 'repostajes';
 let editingId = null;
 let activeVehicle = null; // Currently selected vehicle
 let statsView = 'mensual'; // 'mensual' or 'anual'
+let lastSyncTime = null; // Track last sync time
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', async () => {
@@ -14,19 +15,213 @@ document.addEventListener('DOMContentLoaded', async () => {
         activeVehicle = savedVehicle;
     }
     
+    // Load last sync time
+    lastSyncTime = localStorage.getItem('lastSyncTime');
+    if (lastSyncTime) {
+        updateSyncStatus(new Date(lastSyncTime));
+    }
+    
+    // Check if this is a new device/first launch (no vehicles)
+    const hasData = await hasAnyData();
+    
+    if (!hasData) {
+        // Show welcome screen for new devices
+        showWelcomeScreen();
+    } else {
+        await loadVehicles();
+        setupNavigation();
+        
+        // Only load data if we have an active vehicle
+        if (activeVehicle) {
+            await loadAllData();
+            updateStats();
+            loadEstadisticas();
+        } else {
+            // Show welcome message for other tabs
+            showNoVehicleMessage();
+        }
+    }
+});
+
+// ===== SYNC MENU FUNCTIONS =====
+function openSyncMenu() {
+    const menu = document.getElementById('sync-menu');
+    menu.classList.add('show');
+}
+
+function closeSyncMenu() {
+    const menu = document.getElementById('sync-menu');
+    menu.classList.remove('show');
+}
+
+// Export database to iCloud
+async function exportDatabase() {
+    closeSyncMenu();
+    
+    try {
+        // Show loading indicator
+        const syncBtn = document.getElementById('sync-btn');
+        syncBtn.innerHTML = '⏳';
+        
+        const result = await exportMasterDatabase();
+        
+        if (result.success) {
+            // Update sync time
+            lastSyncTime = new Date().toISOString();
+            localStorage.setItem('lastSyncTime', lastSyncTime);
+            updateSyncStatus(new Date(lastSyncTime));
+            
+            alert('✅ Base de datos exportada correctamente.\n\nGuarda el archivo "gestion_coche_db.json" en tu iCloud Drive para sincronizar entre dispositivos.');
+        } else if (!result.cancelled) {
+            alert('❌ Error al exportar: ' + (result.error || 'Error desconocido'));
+        }
+        
+        syncBtn.innerHTML = '☁️';
+    } catch (error) {
+        console.error('Export error:', error);
+        alert('❌ Error al exportar: ' + error.message);
+        document.getElementById('sync-btn').innerHTML = '☁️';
+    }
+}
+
+// Import database from iCloud
+async function importDatabase() {
+    closeSyncMenu();
+    hideWelcomeScreen();
+    
+    try {
+        // Show merge options modal
+        showMergeOptionsModal();
+    } catch (error) {
+        console.error('Import error:', error);
+        alert('❌ Error al importar: ' + error.message);
+    }
+}
+
+// Show merge options modal
+function showMergeOptionsModal() {
+    const modal = document.getElementById('modal');
+    const modalBody = document.getElementById('modal-body');
+    
+    modalBody.innerHTML = `
+        <h2 class="form-title">📥 Importar Base de Datos</h2>
+        <p style="color: #9CA3AF; margin-bottom: 20px;">Selecciona cómo quieres importar los datos:</p>
+        
+        <div class="merge-options">
+            <div class="merge-option selected" data-mode="merge" onclick="selectMergeOption('merge')">
+                <div class="merge-option-radio"></div>
+                <div class="merge-option-text">
+                    <strong>🔄 Fusionar datos</strong>
+                    <span>Añade registros nuevos sin duplicar los existentes</span>
+                </div>
+            </div>
+            
+            <div class="merge-option" data-mode="overwrite" onclick="selectMergeOption('overwrite')">
+                <div class="merge-option-radio"></div>
+                <div class="merge-option-text">
+                    <strong>🔄 Sobrescribir todo</strong>
+                    <span>Reemplaza TODOS los datos locales con el archivo</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+            <button type="button" class="btn-primary" onclick="confirmImport()">Seleccionar archivo</button>
+        </div>
+    `;
+    
+    modal.classList.add('show');
+}
+
+let selectedMergeMode = 'merge';
+
+function selectMergeOption(mode) {
+    selectedMergeMode = mode;
+    document.querySelectorAll('.merge-option').forEach(opt => {
+        opt.classList.toggle('selected', opt.dataset.mode === mode);
+    });
+}
+
+async function confirmImport() {
+    closeModal();
+    
+    const syncBtn = document.getElementById('sync-btn');
+    syncBtn.innerHTML = '⏳';
+    
+    try {
+        const result = await importMasterDatabase(selectedMergeMode);
+        
+        if (result.success) {
+            // Update sync time
+            lastSyncTime = new Date().toISOString();
+            localStorage.setItem('lastSyncTime', lastSyncTime);
+            updateSyncStatus(new Date(lastSyncTime));
+            
+            // Reload all data
+            await loadVehicles();
+            
+            if (activeVehicle) {
+                await loadAllData();
+                updateStats();
+                loadEstadisticas();
+            }
+            
+            let message = '✅ Importación completada.\n\n';
+            message += `📊 Registros añadidos: ${result.stats.added}\n`;
+            if (selectedMergeMode === 'merge') {
+                message += `⏭️ Duplicados omitidos: ${result.stats.skipped}`;
+            }
+            
+            alert(message);
+        } else if (!result.cancelled) {
+            alert('❌ Error al importar');
+        }
+        
+        syncBtn.innerHTML = '☁️';
+    } catch (error) {
+        console.error('Import error:', error);
+        alert('❌ Error al importar: ' + error.message);
+        syncBtn.innerHTML = '☁️';
+    }
+}
+
+// Update sync status display
+function updateSyncStatus(date) {
+    const statusEl = document.getElementById('sync-status');
+    if (statusEl && date) {
+        const time = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+        statusEl.textContent = `Sincronizado: ${time}`;
+        statusEl.classList.add('show');
+    }
+}
+
+// ===== WELCOME SCREEN =====
+function showWelcomeScreen() {
+    const welcomeScreen = document.getElementById('welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.classList.add('show');
+    }
+}
+
+function hideWelcomeScreen() {
+    const welcomeScreen = document.getElementById('welcome-screen');
+    if (welcomeScreen) {
+        welcomeScreen.classList.remove('show');
+    }
+}
+
+async function startFresh() {
+    hideWelcomeScreen();
+    
+    // Initialize app normally
     await loadVehicles();
     setupNavigation();
     
-    // Only load data if we have an active vehicle
-    if (activeVehicle) {
-        await loadAllData();
-        updateStats();
-        loadEstadisticas();
-    } else {
-        // Show welcome message for other tabs
-        showNoVehicleMessage();
-    }
-});
+    // Switch to Vehículos tab to add first vehicle
+    switchTab('vehiculos');
+    showNoVehicleMessage();
+}
 
 // Navigation
 function setupNavigation() {

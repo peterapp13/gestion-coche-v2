@@ -13,15 +13,72 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Global Header with Vehicle Selector -->
+    <!-- Global Header with Vehicle Selector and Sync -->
     <header class="app-header">
         <h1 class="app-title">🚗 Mi Garaje</h1>
-        <div class="vehicle-selector-container" id="vehicle-selector-container">
-            <select class="vehicle-selector" id="vehicle-selector" onchange="changeVehicle()">
-                <option value="">Selecciona vehículo...</option>
-            </select>
+        <div class="header-controls">
+            <div class="vehicle-selector-container" id="vehicle-selector-container">
+                <select class="vehicle-selector" id="vehicle-selector" onchange="changeVehicle()">
+                    <option value="">Selecciona vehículo...</option>
+                </select>
+            </div>
+            <button class="sync-btn" id="sync-btn" onclick="openSyncMenu()" title="Sincronizar con iCloud">
+                ☁️
+            </button>
         </div>
+        <div class="sync-status" id="sync-status"></div>
     </header>
+
+    <!-- Sync Menu Modal -->
+    <div id="sync-menu" class="sync-menu-overlay">
+        <div class="sync-menu-content">
+            <div class="sync-menu-header">
+                <h3>☁️ Sincronización iCloud</h3>
+                <button class="sync-menu-close" onclick="closeSyncMenu()">✕</button>
+            </div>
+            <div class="sync-menu-body">
+                <button class="sync-option" onclick="exportDatabase()">
+                    <span class="sync-option-icon">📤</span>
+                    <div class="sync-option-text">
+                        <strong>Exportar Base de Datos</strong>
+                        <span>Guardar en iCloud Drive</span>
+                    </div>
+                </button>
+                <button class="sync-option" onclick="importDatabase()">
+                    <span class="sync-option-icon">📥</span>
+                    <div class="sync-option-text">
+                        <strong>Importar Base de Datos</strong>
+                        <span>Cargar desde iCloud Drive</span>
+                    </div>
+                </button>
+            </div>
+            <div class="sync-menu-footer">
+                <p>💡 Guarda el archivo <code>gestion_coche_db.json</code> en tu iCloud Drive para sincronizar entre dispositivos.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Welcome Screen for New Devices -->
+    <div id="welcome-screen" class="welcome-screen">
+        <div class="welcome-content">
+            <div class="welcome-icon">🚗</div>
+            <h1>¡Bienvenido a Mi Garaje!</h1>
+            <p>Gestiona el mantenimiento de tus vehículos de forma sencilla</p>
+            
+            <div class="welcome-actions">
+                <button class="welcome-btn primary" onclick="importDatabase()">
+                    <span class="btn-icon">☁️</span>
+                    Cargar base de datos desde iCloud
+                </button>
+                <button class="welcome-btn secondary" onclick="startFresh()">
+                    <span class="btn-icon">✨</span>
+                    Empezar de cero
+                </button>
+            </div>
+            
+            <p class="welcome-hint">¿Ya tienes datos en otro dispositivo? Carga tu archivo de iCloud Drive.</p>
+        </div>
+    </div>
 
     <!-- Navigation Tabs -->
     <nav class="bottom-nav">
