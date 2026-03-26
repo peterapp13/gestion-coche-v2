@@ -15,7 +15,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-    <!-- Global Header with Vehicle Selector and Sync -->
+    <!-- Global Header - Minimal (Only title + vehicle selector) -->
     <header class="app-header">
         <h1 class="app-title">🚗 Mi Garaje</h1>
         <div class="header-controls">
@@ -24,41 +24,8 @@
                     <option value="">Selecciona vehículo...</option>
                 </select>
             </div>
-            <button class="sync-btn" id="sync-btn" onclick="openSyncMenu()" title="Sincronizar con iCloud">
-                ☁️
-            </button>
         </div>
-        <div class="sync-status" id="sync-status"></div>
     </header>
-
-    <!-- Sync Menu Modal -->
-    <div id="sync-menu" class="sync-menu-overlay">
-        <div class="sync-menu-content">
-            <div class="sync-menu-header">
-                <h3>☁️ Sincronización iCloud</h3>
-                <button class="sync-menu-close" onclick="closeSyncMenu()">✕</button>
-            </div>
-            <div class="sync-menu-body">
-                <button class="sync-option" onclick="exportDatabase()">
-                    <span class="sync-option-icon">📤</span>
-                    <div class="sync-option-text">
-                        <strong>Exportar Base de Datos</strong>
-                        <span>Guardar en iCloud Drive</span>
-                    </div>
-                </button>
-                <button class="sync-option" onclick="importDatabase()">
-                    <span class="sync-option-icon">📥</span>
-                    <div class="sync-option-text">
-                        <strong>Importar Base de Datos</strong>
-                        <span>Cargar desde iCloud Drive</span>
-                    </div>
-                </button>
-            </div>
-            <div class="sync-menu-footer">
-                <p>💡 Guarda el archivo <code>gestion_coche_db.json</code> en tu iCloud Drive para sincronizar entre dispositivos.</p>
-            </div>
-        </div>
-    </div>
 
     <!-- Welcome Screen for New Devices -->
     <div id="welcome-screen" class="welcome-screen">
@@ -104,9 +71,9 @@
             <span class="icon">📊</span>
             <span>Stats</span>
         </button>
-        <button class="nav-btn" data-tab="vehiculos">
-            <span class="icon">🚙</span>
-            <span>Coches</span>
+        <button class="nav-btn" data-tab="ajustes">
+            <span class="icon">⚙️</span>
+            <span>Ajustes</span>
         </button>
     </nav>
 
@@ -139,40 +106,16 @@
             <div id="taller-list" class="records-list"></div>
         </div>
 
-        <!-- Otros Gastos Tab (NEW) -->
+        <!-- Otros Gastos Tab -->
         <div class="tab-content" id="otros">
             <div class="header">
                 <h1>💰 Otros Gastos</h1>
-                <button class="btn-add" onclick="showOtrosGastosForm()">+</button>
+                <button class="btn-add" id="btn-add-gasto" onclick="showOtrosGastosForm()">+</button>
             </div>
             <div id="otros-list" class="records-list"></div>
         </div>
 
-        <!-- Vehículos Tab -->
-        <div class="tab-content" id="vehiculos">
-            <div class="header">
-                <h1>🚙 Vehículos</h1>
-                <button class="btn-add" onclick="showVehiculoForm()">+</button>
-            </div>
-            <div id="vehiculos-list" class="records-list"></div>
-            
-            <!-- Export/Reset Section -->
-            <div class="export-container" style="margin-top: 24px;">
-                <div class="export-card">
-                    <h2>📥 Exportar a CSV</h2>
-                    <p>Descarga todos tus datos en formato CSV</p>
-                    <button class="btn-export" onclick="exportToCSV()">Descargar CSV</button>
-                </div>
-                
-                <div class="export-card danger-zone">
-                    <h2>⚠️ Zona Peligrosa</h2>
-                    <p>Elimina TODOS los datos permanentemente</p>
-                    <button class="btn-danger" onclick="confirmReset()">🗑️ Borrar Todo</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Estadísticas Tab (UPGRADED) -->
+        <!-- Estadísticas Tab -->
         <div class="tab-content" id="estadisticas">
             <div class="header">
                 <h1>📊 Control Financiero</h1>
@@ -200,7 +143,7 @@
                 <!-- Pie Chart - Expense Distribution -->
                 <div class="chart-card">
                     <h3>🥧 Distribución de Gastos</h3>
-                    <div class="chart-container">
+                    <div class="chart-container" id="pie-chart-container">
                         <canvas id="pieChart"></canvas>
                     </div>
                 </div>
@@ -208,7 +151,7 @@
                 <!-- Bar Chart - Monthly Comparison -->
                 <div class="chart-card">
                     <h3>📊 Gasto Mensual</h3>
-                    <div class="chart-container chart-bar">
+                    <div class="chart-container chart-bar" id="bar-chart-container">
                         <canvas id="barChart"></canvas>
                     </div>
                 </div>
@@ -218,6 +161,87 @@
             <div class="financial-summary">
                 <h3>💶 Resumen Financiero</h3>
                 <div id="financial-table-container"></div>
+            </div>
+        </div>
+
+        <!-- Vehículos Tab (Clean - Only vehicle management) -->
+        <div class="tab-content" id="vehiculos">
+            <div class="header">
+                <h1>🚙 Mis Vehículos</h1>
+                <button class="btn-add" onclick="showVehiculoForm()">+</button>
+            </div>
+            <div id="vehiculos-list" class="records-list"></div>
+        </div>
+
+        <!-- Ajustes Tab (NEW) -->
+        <div class="tab-content" id="ajustes">
+            <div class="header">
+                <h1>⚙️ Ajustes</h1>
+            </div>
+            
+            <div class="settings-container">
+                <!-- Sync Status -->
+                <div class="sync-status-card" id="sync-status-card">
+                    <span class="sync-status-text" id="sync-status-text">No sincronizado</span>
+                </div>
+                
+                <!-- iCloud Sync Section -->
+                <div class="settings-section">
+                    <h2>☁️ Sincronización iCloud</h2>
+                    <p class="settings-description">Guarda y carga tu base de datos desde iCloud Drive para sincronizar entre dispositivos.</p>
+                    
+                    <div class="settings-buttons">
+                        <button class="settings-btn primary" onclick="exportDatabase()">
+                            <span class="settings-btn-icon">📤</span>
+                            <div>
+                                <strong>Exportar a iCloud</strong>
+                                <span>Guardar gestion_coche_db.json</span>
+                            </div>
+                        </button>
+                        
+                        <button class="settings-btn secondary" onclick="importDatabase()">
+                            <span class="settings-btn-icon">📥</span>
+                            <div>
+                                <strong>Importar de iCloud</strong>
+                                <span>Cargar base de datos</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Export Section -->
+                <div class="settings-section">
+                    <h2>📊 Exportar Datos</h2>
+                    <p class="settings-description">Descarga tus datos en formato CSV compatible con Excel y Google Sheets.</p>
+                    
+                    <button class="settings-btn export" onclick="exportToCSV()">
+                        <span class="settings-btn-icon">📥</span>
+                        <div>
+                            <strong>Descargar CSV</strong>
+                            <span>Todos los registros</span>
+                        </div>
+                    </button>
+                </div>
+                
+                <!-- App Info -->
+                <div class="settings-section">
+                    <h2>📱 Información</h2>
+                    <div id="app-stats-info"></div>
+                </div>
+                
+                <!-- Danger Zone -->
+                <div class="settings-section danger-zone">
+                    <h2>⚠️ Zona Peligrosa</h2>
+                    <p class="settings-description">Esta acción eliminará TODOS los datos de forma permanente.</p>
+                    
+                    <button class="settings-btn danger" onclick="confirmReset()">
+                        <span class="settings-btn-icon">🗑️</span>
+                        <div>
+                            <strong>Borrar Todo</strong>
+                            <span>Eliminar todos los datos</span>
+                        </div>
+                    </button>
+                </div>
             </div>
         </div>
     </main>

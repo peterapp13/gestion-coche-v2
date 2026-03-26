@@ -23,91 +23,73 @@ const EXPENSE_CATEGORIES = [
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', async () => {
-    await initDB();
-    
-    // Load active vehicle from localStorage
-    const savedVehicle = localStorage.getItem('activeVehicle');
-    if (savedVehicle) {
-        activeVehicle = savedVehicle;
-    }
-    
-    // Load last sync time
-    lastSyncTime = localStorage.getItem('lastSyncTime');
-    if (lastSyncTime) {
-        updateSyncStatus(new Date(lastSyncTime));
-    }
-    
-    // Check if this is a new device/first launch (no vehicles)
-    const hasData = await hasAnyData();
-    
-    if (!hasData) {
-        // Show welcome screen for new devices
-        showWelcomeScreen();
-    } else {
-        await loadVehicles();
-        setupNavigation();
-        populateYearSelector();
+    try {
+        await initDB();
         
-        // Only load data if we have an active vehicle
-        if (activeVehicle) {
-            await loadAllData();
-            updateStats();
-            loadEstadisticas();
-        } else {
-            // Show welcome message for other tabs
-            showNoVehicleMessage();
+        // Load active vehicle from localStorage
+        const savedVehicle = localStorage.getItem('activeVehicle');
+        if (savedVehicle) {
+            activeVehicle = savedVehicle;
         }
+        
+        // Load last sync time
+        lastSyncTime = localStorage.getItem('lastSyncTime');
+        if (lastSyncTime) {
+            updateSyncStatusDisplay(new Date(lastSyncTime));
+        }
+        
+        // Check if this is a new device/first launch (no vehicles)
+        const hasData = await hasAnyData();
+        
+        if (!hasData) {
+            // Show welcome screen for new devices
+            showWelcomeScreen();
+        } else {
+            await loadVehicles();
+            setupNavigation();
+            populateYearSelector();
+            
+            // Only load data if we have an active vehicle
+            if (activeVehicle) {
+                await loadAllData();
+                loadEstadisticas();
+            } else {
+                showNoVehicleMessage();
+            }
+        }
+    } catch (error) {
+        console.error('Init error:', error);
     }
 });
 
-// ===== SYNC MENU FUNCTIONS =====
-function openSyncMenu() {
-    const menu = document.getElementById('sync-menu');
-    menu.classList.add('show');
-}
-
-function closeSyncMenu() {
-    const menu = document.getElementById('sync-menu');
-    menu.classList.remove('show');
-}
+// ===== SYNC FUNCTIONS (Now in Ajustes tab) =====
 
 // Export database to iCloud
 async function exportDatabase() {
-    closeSyncMenu();
-    
     try {
-        // Show loading indicator
-        const syncBtn = document.getElementById('sync-btn');
-        syncBtn.innerHTML = '⏳';
-        
         const result = await exportMasterDatabase();
         
         if (result.success) {
             // Update sync time
             lastSyncTime = new Date().toISOString();
             localStorage.setItem('lastSyncTime', lastSyncTime);
-            updateSyncStatus(new Date(lastSyncTime));
+            updateSyncStatusDisplay(new Date(lastSyncTime));
             
             alert('✅ Base de datos exportada correctamente.\n\nGuarda el archivo "gestion_coche_db.json" en tu iCloud Drive para sincronizar entre dispositivos.');
         } else if (!result.cancelled) {
             alert('❌ Error al exportar: ' + (result.error || 'Error desconocido'));
         }
-        
-        syncBtn.innerHTML = '☁️';
     } catch (error) {
         console.error('Export error:', error);
         alert('❌ Error al exportar: ' + error.message);
-        document.getElementById('sync-btn').innerHTML = '☁️';
     }
 }
 
 // Import database from iCloud
 async function importDatabase() {
-    closeSyncMenu();
     hideWelcomeScreen();
     
     try {
-        // Show merge options modal
         showMergeOptionsModal();
     } catch (error) {
         console.error('Import error:', error);
@@ -163,9 +145,6 @@ function selectMergeOption(mode) {
 async function confirmImport() {
     closeModal();
     
-    const syncBtn = document.getElementById('sync-btn');
-    syncBtn.innerHTML = '⏳';
-    
     try {
         const result = await importMasterDatabase(selectedMergeMode);
         
@@ -173,7 +152,7 @@ async function confirmImport() {
             // Update sync time
             lastSyncTime = new Date().toISOString();
             localStorage.setItem('lastSyncTime', lastSyncTime);
-            updateSyncStatus(new Date(lastSyncTime));
+            updateSyncStatusDisplay(new Date(lastSyncTime));
             
             // Reload all data
             await loadVehicles();
@@ -181,9 +160,11 @@ async function confirmImport() {
             
             if (activeVehicle) {
                 await loadAllData();
-                updateStats();
                 loadEstadisticas();
             }
+            
+            // Update app stats
+            loadAppStats();
             
             let message = '✅ Importación completada.\n\n';
             message += `📊 Registros añadidos: ${result.stats.added}\n`;
@@ -195,22 +176,22 @@ async function confirmImport() {
         } else if (!result.cancelled) {
             alert('❌ Error al importar');
         }
-        
-        syncBtn.innerHTML = '☁️';
     } catch (error) {
         console.error('Import error:', error);
         alert('❌ Error al importar: ' + error.message);
-        syncBtn.innerHTML = '☁️';
     }
 }
 
-// Update sync status display
-function updateSyncStatus(date) {
-    const statusEl = document.getElementById('sync-status');
-    if (statusEl && date) {
+// Update sync status display in Ajustes tab
+function updateSyncStatusDisplay(date) {
+    const statusCard = document.getElementById('sync-status-card');
+    const statusText = document.getElementById('sync-status-text');
+    
+    if (statusCard && statusText && date) {
         const time = date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-        statusEl.textContent = `Sincronizado: ${time}`;
-        statusEl.classList.add('show');
+        const dateStr = date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        statusText.textContent = `✅ Sincronizado: ${dateStr} ${time}`;
+        statusCard.classList.add('synced');
     }
 }
 
@@ -237,7 +218,7 @@ async function startFresh() {
     setupNavigation();
     populateYearSelector();
     
-    // Switch to Vehículos tab to add first vehicle
+    // Switch to Vehículos tab to add first vehicle (now in Ajustes area, but we go to vehiculos)
     switchTab('vehiculos');
     showNoVehicleMessage();
 }
@@ -269,6 +250,12 @@ function switchTab(tab) {
     if (tab === 'estadisticas') {
         loadEstadisticas();
     }
+    
+    // Load app stats when switching to Ajustes
+    if (tab === 'ajustes') {
+        loadAppStats();
+        updateSyncStatusDisplay(lastSyncTime ? new Date(lastSyncTime) : null);
+    }
 }
 
 // Load All Data
@@ -277,6 +264,37 @@ async function loadAllData() {
     await loadAlmacen();
     await loadTaller();
     await loadOtrosGastos();
+}
+
+// ===== APP STATS FOR AJUSTES =====
+async function loadAppStats() {
+    const container = document.getElementById('app-stats-info');
+    if (!container) return;
+    
+    const vehiculos = await getAllRecords('vehiculos');
+    const repostajes = await getAllRecords('repostajes');
+    const almacen = await getAllRecords('almacen');
+    const taller = await getAllRecords('taller');
+    const otros = await getAllRecords('otros_gastos');
+    
+    container.innerHTML = `
+        <div class="stat-info-item">
+            <div class="stat-info-value">${vehiculos.length}</div>
+            <div class="stat-info-label">Vehículos</div>
+        </div>
+        <div class="stat-info-item">
+            <div class="stat-info-value">${repostajes.length}</div>
+            <div class="stat-info-label">Repostajes</div>
+        </div>
+        <div class="stat-info-item">
+            <div class="stat-info-value">${almacen.length}</div>
+            <div class="stat-info-label">Recambios</div>
+        </div>
+        <div class="stat-info-item">
+            <div class="stat-info-value">${taller.length + otros.length}</div>
+            <div class="stat-info-label">Trabajos/Gastos</div>
+        </div>
+    `;
 }
 
 // ===== REPOSTAJES =====
@@ -376,6 +394,11 @@ async function loadRepostajes() {
 }
 
 function showRepostajeForm(id = null) {
+    if (!activeVehicle) {
+        alert('Por favor, selecciona un vehículo primero');
+        return;
+    }
+    
     editingId = id;
     const title = id ? 'Editar Repostaje' : 'Nuevo Repostaje';
     
@@ -474,7 +497,6 @@ async function saveRepostaje(event) {
     
     closeModal();
     await loadRepostajes();
-    updateStats();
     loadEstadisticas();
 }
 
@@ -486,7 +508,6 @@ async function deleteRepostaje(id) {
     if (confirm('¿Estás seguro de que quieres eliminar este repostaje?')) {
         await deleteRecord('repostajes', id);
         await loadRepostajes();
-        updateStats();
         loadEstadisticas();
     }
 }
@@ -557,6 +578,11 @@ async function loadAlmacen() {
 }
 
 function showAlmacenForm(id = null) {
+    if (!activeVehicle) {
+        alert('Por favor, selecciona un vehículo primero');
+        return;
+    }
+    
     editingId = id;
     const title = id ? 'Editar Recambio' : 'Nuevo Recambio';
     
@@ -644,7 +670,6 @@ async function saveAlmacen(event) {
     
     closeModal();
     await loadAlmacen();
-    updateStats();
     loadEstadisticas();
 }
 
@@ -656,7 +681,6 @@ async function deleteAlmacen(id) {
     if (confirm('¿Estás seguro de que quieres eliminar este recambio?')) {
         await deleteRecord('almacen', id);
         await loadAlmacen();
-        updateStats();
         loadEstadisticas();
     }
 }
@@ -876,7 +900,6 @@ async function saveTaller(event) {
     closeModal();
     await loadTaller();
     await loadAlmacen(); // Reload almacén to show updated quantities
-    updateStats();
     loadEstadisticas();
 }
 
@@ -888,22 +911,23 @@ async function deleteTaller(id) {
     if (confirm('¿Estás seguro de que quieres eliminar este trabajo?')) {
         await deleteRecord('taller', id);
         await loadTaller();
-        updateStats();
         loadEstadisticas();
     }
 }
 
-// ===== OTROS GASTOS (NEW MODULE) =====
+// ===== OTROS GASTOS (FIX) =====
 async function loadOtrosGastos() {
     if (!activeVehicle) {
         const container = document.getElementById('otros-list');
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">🚗</div>
-                <div class="empty-state-text">No hay vehículo seleccionado</div>
-                <div class="empty-state-subtext">Selecciona un vehículo en el menú superior</div>
-            </div>
-        `;
+        if (container) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🚗</div>
+                    <div class="empty-state-text">No hay vehículo seleccionado</div>
+                    <div class="empty-state-subtext">Selecciona un vehículo en el menú superior</div>
+                </div>
+            `;
+        }
         return;
     }
     
@@ -912,6 +936,7 @@ async function loadOtrosGastos() {
     vehicleRecords.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     
     const container = document.getElementById('otros-list');
+    if (!container) return;
     
     if (vehicleRecords.length === 0) {
         container.innerHTML = `
@@ -953,7 +978,10 @@ async function loadOtrosGastos() {
     }).join('');
 }
 
+// FIX: Ensure this function works with click events
 function showOtrosGastosForm(id = null) {
+    console.log('showOtrosGastosForm called', { id, activeVehicle }); // Debug
+    
     if (!activeVehicle) {
         alert('Por favor, selecciona un vehículo primero');
         return;
@@ -967,13 +995,18 @@ function showOtrosGastosForm(id = null) {
             openOtrosGastosModal(title, record);
         });
     } else {
-        openOtrosGastosModal(title);
+        openOtrosGastosModal(title, {});
     }
 }
 
 function openOtrosGastosModal(title, data = {}) {
     const modal = document.getElementById('modal');
     const modalBody = document.getElementById('modal-body');
+    
+    if (!modal || !modalBody) {
+        console.error('Modal elements not found');
+        return;
+    }
     
     const categoryOptions = EXPENSE_CATEGORIES.map(cat => 
         `<option value="${cat.value}" ${data.categoria === cat.value ? 'selected' : ''}>${cat.icon} ${cat.label}</option>`
@@ -1029,17 +1062,21 @@ async function saveOtrosGastos(event) {
         importe: parseFloat(formData.get('importe'))
     };
     
-    if (editingId) {
-        data.id = editingId;
-        await updateRecord('otros_gastos', data);
-    } else {
-        await addRecord('otros_gastos', data);
+    try {
+        if (editingId) {
+            data.id = editingId;
+            await updateRecord('otros_gastos', data);
+        } else {
+            await addRecord('otros_gastos', data);
+        }
+        
+        closeModal();
+        await loadOtrosGastos();
+        loadEstadisticas();
+    } catch (error) {
+        console.error('Error saving otros gastos:', error);
+        alert('Error al guardar: ' + error.message);
     }
-    
-    closeModal();
-    await loadOtrosGastos();
-    updateStats();
-    loadEstadisticas();
 }
 
 async function editOtrosGastos(id) {
@@ -1050,12 +1087,11 @@ async function deleteOtrosGastos(id) {
     if (confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
         await deleteRecord('otros_gastos', id);
         await loadOtrosGastos();
-        updateStats();
         loadEstadisticas();
     }
 }
 
-// ===== ESTADÍSTICAS WITH CHARTS =====
+// ===== ESTADÍSTICAS WITH CHARTS (FIX) =====
 function populateYearSelector() {
     const selector = document.getElementById('stats-year-selector');
     if (!selector) return;
@@ -1084,9 +1120,7 @@ async function loadEstadisticas() {
                 </div>
             `;
         }
-        // Clear charts
-        if (pieChartInstance) { pieChartInstance.destroy(); pieChartInstance = null; }
-        if (barChartInstance) { barChartInstance.destroy(); barChartInstance = null; }
+        clearCharts();
         return;
     }
     
@@ -1096,62 +1130,84 @@ async function loadEstadisticas() {
         selectedYear = parseInt(yearSelector.value);
     }
     
-    // Fetch all data
-    const allRepostajes = await getAllRecords('repostajes');
-    const allAlmacen = await getAllRecords('almacen');
-    const allTaller = await getAllRecords('taller');
-    const allOtrosGastos = await getAllRecords('otros_gastos');
-    
-    // Filter by active vehicle
-    const repostajes = allRepostajes.filter(r => r.matricula === activeVehicle);
-    const almacen = allAlmacen.filter(a => a.matricula === activeVehicle);
-    const taller = allTaller.filter(t => t.matricula === activeVehicle);
-    const otrosGastos = allOtrosGastos.filter(o => o.matricula === activeVehicle);
-    
-    // Filter by year
-    const yearRepostajes = repostajes.filter(r => new Date(r.fecha).getFullYear() === selectedYear);
-    const yearAlmacen = almacen.filter(a => new Date(a.fecha_compra).getFullYear() === selectedYear);
-    const yearOtros = otrosGastos.filter(o => new Date(o.fecha).getFullYear() === selectedYear);
-    
-    // Calculate totals
-    const totalFuel = yearRepostajes.reduce((sum, r) => sum + r.total_euros, 0);
-    const totalParts = yearAlmacen.reduce((sum, a) => sum + a.coste_euros, 0);
-    
-    // Fixed costs (Seguro, ITV, Impuesto)
-    const fixedCosts = yearOtros
-        .filter(o => ['seguro', 'itv', 'impuesto'].includes(o.categoria))
-        .reduce((sum, o) => sum + o.importe, 0);
-    
-    // Variable costs (Parking, Peajes, Aditivos, Otros)
-    const variableCosts = yearOtros
-        .filter(o => ['parking', 'peajes', 'aditivos', 'otros'].includes(o.categoria))
-        .reduce((sum, o) => sum + o.importe, 0);
-    
-    const grandTotal = totalFuel + totalParts + fixedCosts + variableCosts;
-    
-    // Render Pie Chart
-    renderPieChart(totalFuel, totalParts, fixedCosts, variableCosts);
-    
-    // Render Bar Chart
-    renderBarChart(yearRepostajes, yearAlmacen, yearOtros);
-    
-    // Render Financial Table
-    renderFinancialTable(totalFuel, totalParts, fixedCosts, variableCosts, grandTotal, yearOtros);
+    try {
+        // Fetch all data
+        const allRepostajes = await getAllRecords('repostajes');
+        const allAlmacen = await getAllRecords('almacen');
+        const allOtrosGastos = await getAllRecords('otros_gastos');
+        
+        // Filter by active vehicle
+        const repostajes = allRepostajes.filter(r => r.matricula === activeVehicle);
+        const almacen = allAlmacen.filter(a => a.matricula === activeVehicle);
+        const otrosGastos = allOtrosGastos.filter(o => o.matricula === activeVehicle);
+        
+        // Filter by year
+        const yearRepostajes = repostajes.filter(r => new Date(r.fecha).getFullYear() === selectedYear);
+        const yearAlmacen = almacen.filter(a => new Date(a.fecha_compra).getFullYear() === selectedYear);
+        const yearOtros = otrosGastos.filter(o => new Date(o.fecha).getFullYear() === selectedYear);
+        
+        // Calculate totals
+        const totalFuel = yearRepostajes.reduce((sum, r) => sum + (r.total_euros || 0), 0);
+        const totalParts = yearAlmacen.reduce((sum, a) => sum + (a.coste_euros || 0), 0);
+        
+        // Fixed costs (Seguro, ITV, Impuesto)
+        const fixedCosts = yearOtros
+            .filter(o => ['seguro', 'itv', 'impuesto'].includes(o.categoria))
+            .reduce((sum, o) => sum + (o.importe || 0), 0);
+        
+        // Variable costs (Parking, Peajes, Aditivos, Otros)
+        const variableCosts = yearOtros
+            .filter(o => ['parking', 'peajes', 'aditivos', 'otros'].includes(o.categoria))
+            .reduce((sum, o) => sum + (o.importe || 0), 0);
+        
+        const grandTotal = totalFuel + totalParts + fixedCosts + variableCosts;
+        
+        // Render Charts
+        renderPieChart(totalFuel, totalParts, fixedCosts, variableCosts);
+        renderBarChart(yearRepostajes, yearAlmacen, yearOtros);
+        
+        // Render Financial Table
+        renderFinancialTable(totalFuel, totalParts, fixedCosts, variableCosts, grandTotal, yearOtros);
+    } catch (error) {
+        console.error('Error loading estadisticas:', error);
+    }
+}
+
+function clearCharts() {
+    if (pieChartInstance) {
+        pieChartInstance.destroy();
+        pieChartInstance = null;
+    }
+    if (barChartInstance) {
+        barChartInstance.destroy();
+        barChartInstance = null;
+    }
 }
 
 function renderPieChart(fuel, parts, fixed, variable) {
-    const ctx = document.getElementById('pieChart');
-    if (!ctx) return;
+    const container = document.getElementById('pie-chart-container');
+    if (!container) return;
     
-    // Destroy existing chart
+    // Destroy existing chart first
     if (pieChartInstance) {
         pieChartInstance.destroy();
+        pieChartInstance = null;
     }
+    
+    // Restore canvas element
+    container.innerHTML = '<canvas id="pieChart"></canvas>';
+    const canvas = document.getElementById('pieChart');
+    
+    if (!canvas) return;
     
     const total = fuel + parts + fixed + variable;
     
-    if (total === 0) {
-        ctx.parentElement.innerHTML = `
+    // Show chart even with zero values - just shows empty
+    const data = [fuel, parts, fixed, variable];
+    const hasData = data.some(v => v > 0);
+    
+    if (!hasData) {
+        container.innerHTML = `
             <div class="chart-no-data">
                 <div class="chart-no-data-icon">📊</div>
                 <div class="chart-no-data-text">No hay datos para ${selectedYear}</div>
@@ -1160,62 +1216,66 @@ function renderPieChart(fuel, parts, fixed, variable) {
         return;
     }
     
-    // Restore canvas if it was replaced
-    if (!ctx.getContext) {
-        ctx.parentElement.innerHTML = '<canvas id="pieChart"></canvas>';
-    }
-    
-    const canvas = document.getElementById('pieChart');
-    
-    pieChartInstance = new Chart(canvas, {
-        type: 'doughnut',
-        data: {
-            labels: ['Combustible', 'Recambios', 'Costes Fijos', 'Costes Variables'],
-            datasets: [{
-                data: [fuel, parts, fixed, variable],
-                backgroundColor: [
-                    '#F59E0B', // Fuel - Orange
-                    '#4285F4', // Parts - Blue
-                    '#EF4444', // Fixed - Red
-                    '#10B981'  // Variable - Green
-                ],
-                borderWidth: 0
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        color: '#9CA3AF',
-                        padding: 15,
-                        font: { size: 12 }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const value = context.raw;
-                            const percentage = ((value / total) * 100).toFixed(1);
-                            return `${context.label}: ${value.toFixed(2)} € (${percentage}%)`;
+    try {
+        pieChartInstance = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: ['Combustible', 'Recambios', 'Costes Fijos', 'Costes Variables'],
+                datasets: [{
+                    data: data,
+                    backgroundColor: [
+                        '#F59E0B', // Fuel - Orange
+                        '#4285F4', // Parts - Blue
+                        '#EF4444', // Fixed - Red
+                        '#10B981'  // Variable - Green
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#9CA3AF',
+                            padding: 15,
+                            font: { size: 11 }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const value = context.raw;
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${context.label}: ${value.toFixed(2)} € (${percentage}%)`;
+                            }
                         }
                     }
                 }
             }
-        }
-    });
+        });
+    } catch (error) {
+        console.error('Error creating pie chart:', error);
+    }
 }
 
 function renderBarChart(repostajes, almacen, otros) {
-    const ctx = document.getElementById('barChart');
-    if (!ctx) return;
+    const container = document.getElementById('bar-chart-container');
+    if (!container) return;
     
-    // Destroy existing chart
+    // Destroy existing chart first
     if (barChartInstance) {
         barChartInstance.destroy();
+        barChartInstance = null;
     }
+    
+    // Restore canvas element
+    container.innerHTML = '<canvas id="barChart"></canvas>';
+    const canvas = document.getElementById('barChart');
+    
+    if (!canvas) return;
     
     // Prepare monthly data
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -1224,23 +1284,23 @@ function renderBarChart(repostajes, almacen, otros) {
     
     repostajes.forEach(r => {
         const month = new Date(r.fecha).getMonth();
-        fuelByMonth[month] += r.total_euros;
+        fuelByMonth[month] += r.total_euros || 0;
     });
     
     almacen.forEach(a => {
         const month = new Date(a.fecha_compra).getMonth();
-        othersByMonth[month] += a.coste_euros;
+        othersByMonth[month] += a.coste_euros || 0;
     });
     
     otros.forEach(o => {
         const month = new Date(o.fecha).getMonth();
-        othersByMonth[month] += o.importe;
+        othersByMonth[month] += o.importe || 0;
     });
     
     const hasData = fuelByMonth.some(v => v > 0) || othersByMonth.some(v => v > 0);
     
     if (!hasData) {
-        ctx.parentElement.innerHTML = `
+        container.innerHTML = `
             <div class="chart-no-data">
                 <div class="chart-no-data-icon">📈</div>
                 <div class="chart-no-data-text">No hay datos mensuales</div>
@@ -1249,61 +1309,58 @@ function renderBarChart(repostajes, almacen, otros) {
         return;
     }
     
-    // Restore canvas if needed
-    if (!ctx.getContext) {
-        ctx.parentElement.innerHTML = '<canvas id="barChart"></canvas>';
-    }
-    
-    const canvas = document.getElementById('barChart');
-    
-    barChartInstance = new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: months,
-            datasets: [
-                {
-                    label: 'Combustible',
-                    data: fuelByMonth,
-                    backgroundColor: '#F59E0B',
-                    borderRadius: 4
-                },
-                {
-                    label: 'Otros Gastos',
-                    data: othersByMonth,
-                    backgroundColor: '#4285F4',
-                    borderRadius: 4
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    grid: { display: false },
-                    ticks: { color: '#9CA3AF', font: { size: 10 } }
-                },
-                y: {
-                    grid: { color: '#2A2A2A' },
-                    ticks: { 
-                        color: '#9CA3AF',
-                        callback: value => value + '€'
+    try {
+        barChartInstance = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: months,
+                datasets: [
+                    {
+                        label: 'Combustible',
+                        data: fuelByMonth,
+                        backgroundColor: '#F59E0B',
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Otros Gastos',
+                        data: othersByMonth,
+                        backgroundColor: '#4285F4',
+                        borderRadius: 4
                     }
-                }
+                ]
             },
-            plugins: {
-                legend: {
-                    position: 'top',
-                    labels: { color: '#9CA3AF', font: { size: 11 } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#9CA3AF', font: { size: 10 } }
+                    },
+                    y: {
+                        grid: { color: '#2A2A2A' },
+                        ticks: { 
+                            color: '#9CA3AF',
+                            callback: value => value + '€'
+                        }
+                    }
                 },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} €`
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#9CA3AF', font: { size: 11 } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} €`
+                        }
                     }
                 }
             }
-        }
-    });
+        });
+    } catch (error) {
+        console.error('Error creating bar chart:', error);
+    }
 }
 
 function renderFinancialTable(fuel, parts, fixed, variable, total, otrosGastos) {
@@ -1311,13 +1368,13 @@ function renderFinancialTable(fuel, parts, fixed, variable, total, otrosGastos) 
     if (!container) return;
     
     // Break down fixed and variable costs
-    const seguro = otrosGastos.filter(o => o.categoria === 'seguro').reduce((s, o) => s + o.importe, 0);
-    const itv = otrosGastos.filter(o => o.categoria === 'itv').reduce((s, o) => s + o.importe, 0);
-    const impuesto = otrosGastos.filter(o => o.categoria === 'impuesto').reduce((s, o) => s + o.importe, 0);
-    const parking = otrosGastos.filter(o => o.categoria === 'parking').reduce((s, o) => s + o.importe, 0);
-    const peajes = otrosGastos.filter(o => o.categoria === 'peajes').reduce((s, o) => s + o.importe, 0);
-    const aditivos = otrosGastos.filter(o => o.categoria === 'aditivos').reduce((s, o) => s + o.importe, 0);
-    const otros = otrosGastos.filter(o => o.categoria === 'otros').reduce((s, o) => s + o.importe, 0);
+    const seguro = otrosGastos.filter(o => o.categoria === 'seguro').reduce((s, o) => s + (o.importe || 0), 0);
+    const itv = otrosGastos.filter(o => o.categoria === 'itv').reduce((s, o) => s + (o.importe || 0), 0);
+    const impuesto = otrosGastos.filter(o => o.categoria === 'impuesto').reduce((s, o) => s + (o.importe || 0), 0);
+    const parking = otrosGastos.filter(o => o.categoria === 'parking').reduce((s, o) => s + (o.importe || 0), 0);
+    const peajes = otrosGastos.filter(o => o.categoria === 'peajes').reduce((s, o) => s + (o.importe || 0), 0);
+    const aditivos = otrosGastos.filter(o => o.categoria === 'aditivos').reduce((s, o) => s + (o.importe || 0), 0);
+    const otros = otrosGastos.filter(o => o.categoria === 'otros').reduce((s, o) => s + (o.importe || 0), 0);
     
     container.innerHTML = `
         <table class="financial-table">
@@ -1386,10 +1443,12 @@ function renderFinancialTable(fuel, parts, fixed, variable, total, otrosGastos) 
     `;
 }
 
-function getMonthName(month) {
-    const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
-                    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    return months[month - 1];
+function changeStatsView(view) {
+    statsView = view;
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === view);
+    });
+    loadEstadisticas();
 }
 
 // ===== EXPORT CSV =====
@@ -1447,44 +1506,6 @@ async function exportToCSV() {
     window.URL.revokeObjectURL(url);
 }
 
-// Stats
-async function updateStats() {
-    const allRepostajes = await getAllRecords('repostajes');
-    const allAlmacen = await getAllRecords('almacen');
-    const allTaller = await getAllRecords('taller');
-    const allOtros = await getAllRecords('otros_gastos');
-    
-    // Filter by active vehicle if one is selected
-    const repostajes = activeVehicle ? allRepostajes.filter(r => r.matricula === activeVehicle) : allRepostajes;
-    const almacen = activeVehicle ? allAlmacen.filter(a => a.matricula === activeVehicle) : allAlmacen;
-    const taller = activeVehicle ? allTaller.filter(t => t.matricula === activeVehicle) : allTaller;
-    const otros = activeVehicle ? allOtros.filter(o => o.matricula === activeVehicle) : allOtros;
-    
-    const statsContainer = document.getElementById('stats-content');
-    if (statsContainer) {
-        statsContainer.innerHTML = `
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-value">${repostajes.length}</div>
-                    <div class="stat-label">Repostajes</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">${almacen.length}</div>
-                    <div class="stat-label">Recambios</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">${taller.length}</div>
-                    <div class="stat-label">Trabajos</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">${otros.length}</div>
-                    <div class="stat-label">Otros Gastos</div>
-                </div>
-            </div>
-        `;
-    }
-}
-
 // Modal
 function closeModal() {
     const modal = document.getElementById('modal');
@@ -1494,15 +1515,15 @@ function closeModal() {
 
 // ===== NO VEHICLE STATE =====
 function showNoVehicleMessage() {
-    const tabs = ['repostajes', 'almacen', 'taller', 'otros', 'estadisticas'];
+    const tabs = ['repostajes', 'almacen', 'taller', 'otros'];
     tabs.forEach(tab => {
-        const container = document.getElementById(`${tab}-list`) || document.getElementById(`${tab}-content`) || document.getElementById('financial-table-container');
+        const container = document.getElementById(`${tab}-list`);
         if (container) {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">🚗</div>
                     <div class="empty-state-text">No hay vehículo seleccionado</div>
-                    <div class="empty-state-subtext">Ve a la pestaña "Coches" para añadir tu primer vehículo</div>
+                    <div class="empty-state-subtext">Ve a ⚙️ Ajustes > Mis Vehículos para añadir tu primer vehículo</div>
                 </div>
             `;
         }
@@ -1541,7 +1562,6 @@ async function loadVehicles() {
             selector.value = activeVehicle;
             // Reload data with new active vehicle
             await loadAllData();
-            updateStats();
             loadEstadisticas();
         }
     }
@@ -1560,7 +1580,7 @@ async function loadVehicles() {
         `;
     } else {
         container.innerHTML = vehicles.map(v => `
-            <div class="record-card">
+            <div class="record-card ${v.matricula === activeVehicle ? 'active-vehicle' : ''}">
                 <div class="record-header">
                     <div>
                         <div class="record-title">${v.marca} ${v.modelo}</div>
@@ -1598,7 +1618,6 @@ function changeVehicle() {
         localStorage.setItem('activeVehicle', activeVehicle);
         loadAllData();
         loadEstadisticas();
-        updateStats();
     } else {
         showNoVehicleMessage();
     }
@@ -1700,7 +1719,6 @@ async function saveVehiculo(event) {
         // Reload all data if this is now the active vehicle
         if (activeVehicle === data.matricula) {
             await loadAllData();
-            updateStats();
             loadEstadisticas();
         }
     } catch (error) {
@@ -1740,20 +1758,10 @@ async function deleteVehiculo(id) {
             showNoVehicleMessage();
         }
         
-        updateStats();
         loadEstadisticas();
     } catch (error) {
         alert('Error al eliminar vehículo: ' + error.message);
     }
-}
-
-// ===== STATS VIEW TOGGLE =====
-function changeStatsView(view) {
-    statsView = view;
-    document.querySelectorAll('.toggle-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.view === view);
-    });
-    loadEstadisticas();
 }
 
 // ===== RESET FUNCTION =====
