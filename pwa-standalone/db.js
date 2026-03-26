@@ -1,6 +1,6 @@
 // IndexedDB Setup
 const DB_NAME = 'VehiculoDB';
-const DB_VERSION = 2; // Incremented version for new collection
+const DB_VERSION = 3; // Incremented for otros_gastos collection
 let db;
 
 // Master Database File Name
@@ -33,6 +33,10 @@ function initDB() {
             if (!db.objectStoreNames.contains('taller')) {
                 db.createObjectStore('taller', { keyPath: 'id', autoIncrement: true });
             }
+            // NEW: Otros Gastos collection
+            if (!db.objectStoreNames.contains('otros_gastos')) {
+                db.createObjectStore('otros_gastos', { keyPath: 'id', autoIncrement: true });
+            }
         };
     });
 }
@@ -51,6 +55,11 @@ function addRecord(storeName, data) {
 
 function getAllRecords(storeName) {
     return new Promise((resolve, reject) => {
+        // Check if store exists
+        if (!db.objectStoreNames.contains(storeName)) {
+            resolve([]);
+            return;
+        }
         const transaction = db.transaction([storeName], 'readonly');
         const store = transaction.objectStore(storeName);
         const request = store.getAll();
@@ -97,15 +106,17 @@ function getRecord(storeName, id) {
 function clearAllData() {
     return new Promise(async (resolve, reject) => {
         try {
-            const stores = ['vehiculos', 'repostajes', 'almacen', 'taller'];
+            const stores = ['vehiculos', 'repostajes', 'almacen', 'taller', 'otros_gastos'];
             for (const storeName of stores) {
-                const transaction = db.transaction([storeName], 'readwrite');
-                const store = transaction.objectStore(storeName);
-                await new Promise((res, rej) => {
-                    const request = store.clear();
-                    request.onsuccess = () => res();
-                    request.onerror = () => rej(request.error);
-                });
+                if (db.objectStoreNames.contains(storeName)) {
+                    const transaction = db.transaction([storeName], 'readwrite');
+                    const store = transaction.objectStore(storeName);
+                    await new Promise((res, rej) => {
+                        const request = store.clear();
+                        request.onsuccess = () => res();
+                        request.onerror = () => rej(request.error);
+                    });
+                }
             }
             resolve();
         } catch (error) {
@@ -122,23 +133,26 @@ async function getMasterDatabaseJSON() {
     const repostajes = await getAllRecords('repostajes');
     const almacen = await getAllRecords('almacen');
     const taller = await getAllRecords('taller');
+    const otros_gastos = await getAllRecords('otros_gastos');
     
     return {
-        version: '2.0',
+        version: '3.0',
         exportDate: new Date().toISOString(),
         appName: 'Mi Garaje - Gestión de Vehículos',
         data: {
             vehiculos,
             repostajes,
             almacen,
-            taller
+            taller,
+            otros_gastos
         },
         metadata: {
             vehiculosCount: vehiculos.length,
             repostajesCount: repostajes.length,
             almacenCount: almacen.length,
             tallerCount: taller.length,
-            totalRecords: vehiculos.length + repostajes.length + almacen.length + taller.length
+            otrosGastosCount: otros_gastos.length,
+            totalRecords: vehiculos.length + repostajes.length + almacen.length + taller.length + otros_gastos.length
         }
     };
 }
@@ -229,7 +243,7 @@ async function importMasterDatabase(mergeMode = 'merge') {
 
 // Process the imported database
 async function processDatabaseImport(importedDB, mergeMode) {
-    const stores = ['vehiculos', 'repostajes', 'almacen', 'taller'];
+    const stores = ['vehiculos', 'repostajes', 'almacen', 'taller', 'otros_gastos'];
     const stats = { added: 0, updated: 0, skipped: 0 };
     
     if (mergeMode === 'overwrite') {
@@ -304,6 +318,15 @@ function checkForDuplicate(storeName, importedRecord, existingRecords) {
                 r.matricula === importedRecord.matricula &&
                 r.fecha_montaje === importedRecord.fecha_montaje &&
                 r.km_montaje === importedRecord.km_montaje
+            );
+        
+        case 'otros_gastos':
+            // Check by matricula + fecha + categoria + importe
+            return existingRecords.some(r => 
+                r.matricula === importedRecord.matricula &&
+                r.fecha === importedRecord.fecha &&
+                r.categoria === importedRecord.categoria &&
+                r.importe === importedRecord.importe
             );
         
         default:

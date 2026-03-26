@@ -2,8 +2,24 @@
 let currentTab = 'repostajes';
 let editingId = null;
 let activeVehicle = null; // Currently selected vehicle
-let statsView = 'mensual'; // 'mensual' or 'anual'
+let statsView = 'anual'; // 'mensual' or 'anual'
 let lastSyncTime = null; // Track last sync time
+let selectedYear = new Date().getFullYear();
+
+// Chart instances (to destroy before re-creating)
+let pieChartInstance = null;
+let barChartInstance = null;
+
+// Expense Categories for "Otros Gastos"
+const EXPENSE_CATEGORIES = [
+    { value: 'seguro', label: 'Seguro', icon: '🛡️', type: 'fixed' },
+    { value: 'itv', label: 'ITV', icon: '🔍', type: 'fixed' },
+    { value: 'impuesto', label: 'Impuesto Circulación', icon: '📋', type: 'fixed' },
+    { value: 'parking', label: 'Parking', icon: '🅿️', type: 'variable' },
+    { value: 'peajes', label: 'Peajes', icon: '🛣️', type: 'variable' },
+    { value: 'aditivos', label: 'Aditivos', icon: '🧪', type: 'variable' },
+    { value: 'otros', label: 'Otros', icon: '📝', type: 'variable' }
+];
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', async () => {
@@ -30,6 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         await loadVehicles();
         setupNavigation();
+        populateYearSelector();
         
         // Only load data if we have an active vehicle
         if (activeVehicle) {
@@ -160,6 +177,7 @@ async function confirmImport() {
             
             // Reload all data
             await loadVehicles();
+            populateYearSelector();
             
             if (activeVehicle) {
                 await loadAllData();
@@ -217,6 +235,7 @@ async function startFresh() {
     // Initialize app normally
     await loadVehicles();
     setupNavigation();
+    populateYearSelector();
     
     // Switch to Vehículos tab to add first vehicle
     switchTab('vehiculos');
@@ -257,6 +276,7 @@ async function loadAllData() {
     await loadRepostajes();
     await loadAlmacen();
     await loadTaller();
+    await loadOtrosGastos();
 }
 
 // ===== REPOSTAJES =====
@@ -305,7 +325,7 @@ async function loadRepostajes() {
         return;
     }
     
-    container.innerHTML = records.map(r => `
+    container.innerHTML = vehicleRecords.map(r => `
         <div class="record-card">
             <div class="record-header">
                 <div>
@@ -873,190 +893,496 @@ async function deleteTaller(id) {
     }
 }
 
-// ===== ESTADÍSTICAS =====
-async function loadEstadisticas() {
+// ===== OTROS GASTOS (NEW MODULE) =====
+async function loadOtrosGastos() {
     if (!activeVehicle) {
-        const container = document.getElementById('estadisticas-content');
+        const container = document.getElementById('otros-list');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🚗</div>
                 <div class="empty-state-text">No hay vehículo seleccionado</div>
-                <div class="empty-state-subtext">Selecciona un vehículo para ver estadísticas</div>
+                <div class="empty-state-subtext">Selecciona un vehículo en el menú superior</div>
             </div>
         `;
         return;
     }
     
+    const records = await getAllRecords('otros_gastos');
+    const vehicleRecords = records.filter(r => r.matricula === activeVehicle);
+    vehicleRecords.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    
+    const container = document.getElementById('otros-list');
+    
+    if (vehicleRecords.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">💰</div>
+                <div class="empty-state-text">No hay otros gastos registrados</div>
+                <div class="empty-state-subtext">Registra seguros, ITV, impuestos, parking...</div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = vehicleRecords.map(r => {
+        const category = EXPENSE_CATEGORIES.find(c => c.value === r.categoria) || { icon: '📝', label: r.categoria };
+        return `
+            <div class="record-card">
+                <div class="record-header">
+                    <div>
+                        <div class="record-title">${category.icon} ${r.descripcion}</div>
+                        <span class="category-badge ${r.categoria}">${category.label}</span>
+                    </div>
+                    <div class="record-actions">
+                        <button class="btn-edit" onclick="editOtrosGastos(${r.id})">✏️</button>
+                        <button class="btn-delete" onclick="deleteOtrosGastos(${r.id})">🗑️</button>
+                    </div>
+                </div>
+                <div class="record-body">
+                    <div class="record-row">
+                        <span class="record-label">Fecha:</span>
+                        <span class="record-value">${r.fecha}</span>
+                    </div>
+                    <div class="record-row">
+                        <span class="record-label">Importe:</span>
+                        <span class="record-value" style="color: #EF4444; font-weight: bold;">${r.importe.toFixed(2)} €</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function showOtrosGastosForm(id = null) {
+    if (!activeVehicle) {
+        alert('Por favor, selecciona un vehículo primero');
+        return;
+    }
+    
+    editingId = id;
+    const title = id ? 'Editar Gasto' : 'Nuevo Gasto';
+    
+    if (id) {
+        getRecord('otros_gastos', id).then(record => {
+            openOtrosGastosModal(title, record);
+        });
+    } else {
+        openOtrosGastosModal(title);
+    }
+}
+
+function openOtrosGastosModal(title, data = {}) {
+    const modal = document.getElementById('modal');
+    const modalBody = document.getElementById('modal-body');
+    
+    const categoryOptions = EXPENSE_CATEGORIES.map(cat => 
+        `<option value="${cat.value}" ${data.categoria === cat.value ? 'selected' : ''}>${cat.icon} ${cat.label}</option>`
+    ).join('');
+    
+    modalBody.innerHTML = `
+        <h2 class="form-title">${title}</h2>
+        <form id="otros-gastos-form" onsubmit="saveOtrosGastos(event)">
+            <div class="form-group">
+                <label class="form-label">Fecha</label>
+                <input type="date" class="form-input" name="fecha" value="${data.fecha || new Date().toISOString().split('T')[0]}" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Categoría</label>
+                <select class="form-select" name="categoria" required>
+                    ${categoryOptions}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Descripción</label>
+                <input type="text" class="form-input" name="descripcion" value="${data.descripcion || ''}" placeholder="Ej: Seguro a terceros 2024" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Importe (€)</label>
+                <input type="number" step="0.01" class="form-input" name="importe" value="${data.importe || ''}" placeholder="0.00" required>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
+                <button type="submit" class="btn-primary">Guardar</button>
+            </div>
+        </form>
+    `;
+    
+    modal.classList.add('show');
+}
+
+async function saveOtrosGastos(event) {
+    event.preventDefault();
+    
+    if (!activeVehicle) {
+        alert('Por favor, selecciona un vehículo primero');
+        return;
+    }
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    
+    const data = {
+        matricula: activeVehicle,
+        fecha: formData.get('fecha'),
+        categoria: formData.get('categoria'),
+        descripcion: formData.get('descripcion'),
+        importe: parseFloat(formData.get('importe'))
+    };
+    
+    if (editingId) {
+        data.id = editingId;
+        await updateRecord('otros_gastos', data);
+    } else {
+        await addRecord('otros_gastos', data);
+    }
+    
+    closeModal();
+    await loadOtrosGastos();
+    updateStats();
+    loadEstadisticas();
+}
+
+async function editOtrosGastos(id) {
+    showOtrosGastosForm(id);
+}
+
+async function deleteOtrosGastos(id) {
+    if (confirm('¿Estás seguro de que quieres eliminar este gasto?')) {
+        await deleteRecord('otros_gastos', id);
+        await loadOtrosGastos();
+        updateStats();
+        loadEstadisticas();
+    }
+}
+
+// ===== ESTADÍSTICAS WITH CHARTS =====
+function populateYearSelector() {
+    const selector = document.getElementById('stats-year-selector');
+    if (!selector) return;
+    
+    const currentYear = new Date().getFullYear();
+    const years = [];
+    
+    // Add years from current to 5 years ago
+    for (let y = currentYear; y >= currentYear - 5; y--) {
+        years.push(y);
+    }
+    
+    selector.innerHTML = years.map(y => 
+        `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`
+    ).join('');
+}
+
+async function loadEstadisticas() {
+    if (!activeVehicle) {
+        const container = document.getElementById('financial-table-container');
+        if (container) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🚗</div>
+                    <div class="empty-state-text">No hay vehículo seleccionado</div>
+                </div>
+            `;
+        }
+        // Clear charts
+        if (pieChartInstance) { pieChartInstance.destroy(); pieChartInstance = null; }
+        if (barChartInstance) { barChartInstance.destroy(); barChartInstance = null; }
+        return;
+    }
+    
+    // Get selected year
+    const yearSelector = document.getElementById('stats-year-selector');
+    if (yearSelector) {
+        selectedYear = parseInt(yearSelector.value);
+    }
+    
+    // Fetch all data
     const allRepostajes = await getAllRecords('repostajes');
     const allAlmacen = await getAllRecords('almacen');
+    const allTaller = await getAllRecords('taller');
+    const allOtrosGastos = await getAllRecords('otros_gastos');
     
     // Filter by active vehicle
     const repostajes = allRepostajes.filter(r => r.matricula === activeVehicle);
     const almacen = allAlmacen.filter(a => a.matricula === activeVehicle);
+    const taller = allTaller.filter(t => t.matricula === activeVehicle);
+    const otrosGastos = allOtrosGastos.filter(o => o.matricula === activeVehicle);
     
-    const container = document.getElementById('estadisticas-content');
+    // Filter by year
+    const yearRepostajes = repostajes.filter(r => new Date(r.fecha).getFullYear() === selectedYear);
+    const yearAlmacen = almacen.filter(a => new Date(a.fecha_compra).getFullYear() === selectedYear);
+    const yearOtros = otrosGastos.filter(o => new Date(o.fecha).getFullYear() === selectedYear);
     
-    // Fuel Statistics
-    let fuelTableRows = '';
+    // Calculate totals
+    const totalFuel = yearRepostajes.reduce((sum, r) => sum + r.total_euros, 0);
+    const totalParts = yearAlmacen.reduce((sum, a) => sum + a.coste_euros, 0);
     
-    if (statsView === 'mensual') {
-        // MENSUAL VIEW: Current year grouped by month
-        const currentYear = new Date().getFullYear();
-        const fuelStats = {};
-        
-        repostajes.forEach(r => {
-            const date = new Date(r.fecha);
-            const year = date.getFullYear();
-            
-            // Only current year
-            if (year === currentYear) {
-                const month = date.getMonth() + 1;
-                const key = `${year}-${month.toString().padStart(2, '0')}`;
-                
-                if (!fuelStats[key]) {
-                    fuelStats[key] = {
-                        year,
-                        month,
-                        litros: 0,
-                        coste: 0,
-                        count: 0
-                    };
-                }
-                
-                fuelStats[key].litros += r.litros;
-                fuelStats[key].coste += r.total_euros;
-                fuelStats[key].count += 1;
-            }
-        });
-        
-        const fuelStatsArray = Object.values(fuelStats).sort((a, b) => b.month - a.month);
-        
-        fuelTableRows = fuelStatsArray.length > 0 ? fuelStatsArray.map(stat => `
-            <tr>
-                <td>${getMonthName(stat.month)}</td>
-                <td class="highlight-value">${stat.litros.toFixed(2)} L</td>
-                <td class="highlight-value">${stat.coste.toFixed(2)} €</td>
-                <td>${(stat.coste / stat.litros).toFixed(3)} €/L</td>
-            </tr>
-        `).join('') : '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">No hay datos para el año actual</td></tr>';
-        
-        var fuelTableHeader = `
-            <thead>
-                <tr>
-                    <th>Mes (${currentYear})</th>
-                    <th>Total Litros</th>
-                    <th>Coste Total</th>
-                    <th>Precio Medio/L</th>
-                </tr>
-            </thead>
-        `;
-        
-    } else {
-        // ANUAL VIEW: All years grouped by year (no month column)
-        const fuelStats = {};
-        
-        repostajes.forEach(r => {
-            const year = new Date(r.fecha).getFullYear();
-            
-            if (!fuelStats[year]) {
-                fuelStats[year] = {
-                    year,
-                    litros: 0,
-                    coste: 0,
-                    count: 0
-                };
-            }
-            
-            fuelStats[year].litros += r.litros;
-            fuelStats[year].coste += r.total_euros;
-            fuelStats[year].count += 1;
-        });
-        
-        const fuelStatsArray = Object.values(fuelStats).sort((a, b) => b.year - a.year);
-        
-        fuelTableRows = fuelStatsArray.length > 0 ? fuelStatsArray.map(stat => `
-            <tr>
-                <td>${stat.year}</td>
-                <td class="highlight-value">${stat.litros.toFixed(2)} L</td>
-                <td class="highlight-value">${stat.coste.toFixed(2)} €</td>
-                <td>${(stat.coste / stat.litros).toFixed(3)} €/L</td>
-            </tr>
-        `).join('') : '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">No hay datos de combustible</td></tr>';
-        
-        var fuelTableHeader = `
-            <thead>
-                <tr>
-                    <th>Año</th>
-                    <th>Total Litros</th>
-                    <th>Coste Total</th>
-                    <th>Precio Medio/L</th>
-                </tr>
-            </thead>
-        `;
+    // Fixed costs (Seguro, ITV, Impuesto)
+    const fixedCosts = yearOtros
+        .filter(o => ['seguro', 'itv', 'impuesto'].includes(o.categoria))
+        .reduce((sum, o) => sum + o.importe, 0);
+    
+    // Variable costs (Parking, Peajes, Aditivos, Otros)
+    const variableCosts = yearOtros
+        .filter(o => ['parking', 'peajes', 'aditivos', 'otros'].includes(o.categoria))
+        .reduce((sum, o) => sum + o.importe, 0);
+    
+    const grandTotal = totalFuel + totalParts + fixedCosts + variableCosts;
+    
+    // Render Pie Chart
+    renderPieChart(totalFuel, totalParts, fixedCosts, variableCosts);
+    
+    // Render Bar Chart
+    renderBarChart(yearRepostajes, yearAlmacen, yearOtros);
+    
+    // Render Financial Table
+    renderFinancialTable(totalFuel, totalParts, fixedCosts, variableCosts, grandTotal, yearOtros);
+}
+
+function renderPieChart(fuel, parts, fixed, variable) {
+    const ctx = document.getElementById('pieChart');
+    if (!ctx) return;
+    
+    // Destroy existing chart
+    if (pieChartInstance) {
+        pieChartInstance.destroy();
     }
     
-    // Annual Spending from Almacén (always by year)
-    const almacenStats = {};
-    almacen.forEach(a => {
-        const year = new Date(a.fecha_compra).getFullYear();
-        
-        if (!almacenStats[year]) {
-            almacenStats[year] = {
-                total: 0,
-                partes: 0,
-                servicios: 0
-            };
-        }
-        
-        almacenStats[year].total += a.coste_euros;
-        
-        if (a.estado === 'Servicio') {
-            almacenStats[year].servicios += a.coste_euros;
-        } else {
-            almacenStats[year].partes += a.coste_euros;
+    const total = fuel + parts + fixed + variable;
+    
+    if (total === 0) {
+        ctx.parentElement.innerHTML = `
+            <div class="chart-no-data">
+                <div class="chart-no-data-icon">📊</div>
+                <div class="chart-no-data-text">No hay datos para ${selectedYear}</div>
+            </div>
+        `;
+        return;
+    }
+    
+    // Restore canvas if it was replaced
+    if (!ctx.getContext) {
+        ctx.parentElement.innerHTML = '<canvas id="pieChart"></canvas>';
+    }
+    
+    const canvas = document.getElementById('pieChart');
+    
+    pieChartInstance = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            labels: ['Combustible', 'Recambios', 'Costes Fijos', 'Costes Variables'],
+            datasets: [{
+                data: [fuel, parts, fixed, variable],
+                backgroundColor: [
+                    '#F59E0B', // Fuel - Orange
+                    '#4285F4', // Parts - Blue
+                    '#EF4444', // Fixed - Red
+                    '#10B981'  // Variable - Green
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#9CA3AF',
+                        padding: 15,
+                        font: { size: 12 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const value = context.raw;
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${context.label}: ${value.toFixed(2)} € (${percentage}%)`;
+                        }
+                    }
+                }
+            }
         }
     });
+}
+
+function renderBarChart(repostajes, almacen, otros) {
+    const ctx = document.getElementById('barChart');
+    if (!ctx) return;
     
-    const almacenStatsArray = Object.entries(almacenStats)
-        .sort((a, b) => b[0] - a[0])
-        .map(([year, data]) => ({ year: parseInt(year), ...data }));
+    // Destroy existing chart
+    if (barChartInstance) {
+        barChartInstance.destroy();
+    }
     
-    const almacenTableRows = almacenStatsArray.length > 0 ? almacenStatsArray.map(stat => `
-        <tr>
-            <td>${stat.year}</td>
-            <td class="highlight-value">${stat.partes.toFixed(2)} €</td>
-            <td class="highlight-value">${stat.servicios.toFixed(2)} €</td>
-            <td class="highlight-value">${stat.total.toFixed(2)} €</td>
-        </tr>
-    `).join('') : '<tr><td colspan="4" style="text-align: center; color: #9CA3AF;">No hay datos de almacén</td></tr>';
+    // Prepare monthly data
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const fuelByMonth = new Array(12).fill(0);
+    const othersByMonth = new Array(12).fill(0);
+    
+    repostajes.forEach(r => {
+        const month = new Date(r.fecha).getMonth();
+        fuelByMonth[month] += r.total_euros;
+    });
+    
+    almacen.forEach(a => {
+        const month = new Date(a.fecha_compra).getMonth();
+        othersByMonth[month] += a.coste_euros;
+    });
+    
+    otros.forEach(o => {
+        const month = new Date(o.fecha).getMonth();
+        othersByMonth[month] += o.importe;
+    });
+    
+    const hasData = fuelByMonth.some(v => v > 0) || othersByMonth.some(v => v > 0);
+    
+    if (!hasData) {
+        ctx.parentElement.innerHTML = `
+            <div class="chart-no-data">
+                <div class="chart-no-data-icon">📈</div>
+                <div class="chart-no-data-text">No hay datos mensuales</div>
+            </div>
+        `;
+        return;
+    }
+    
+    // Restore canvas if needed
+    if (!ctx.getContext) {
+        ctx.parentElement.innerHTML = '<canvas id="barChart"></canvas>';
+    }
+    
+    const canvas = document.getElementById('barChart');
+    
+    barChartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: months,
+            datasets: [
+                {
+                    label: 'Combustible',
+                    data: fuelByMonth,
+                    backgroundColor: '#F59E0B',
+                    borderRadius: 4
+                },
+                {
+                    label: 'Otros Gastos',
+                    data: othersByMonth,
+                    backgroundColor: '#4285F4',
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#9CA3AF', font: { size: 10 } }
+                },
+                y: {
+                    grid: { color: '#2A2A2A' },
+                    ticks: { 
+                        color: '#9CA3AF',
+                        callback: value => value + '€'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: '#9CA3AF', font: { size: 11 } }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} €`
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderFinancialTable(fuel, parts, fixed, variable, total, otrosGastos) {
+    const container = document.getElementById('financial-table-container');
+    if (!container) return;
+    
+    // Break down fixed and variable costs
+    const seguro = otrosGastos.filter(o => o.categoria === 'seguro').reduce((s, o) => s + o.importe, 0);
+    const itv = otrosGastos.filter(o => o.categoria === 'itv').reduce((s, o) => s + o.importe, 0);
+    const impuesto = otrosGastos.filter(o => o.categoria === 'impuesto').reduce((s, o) => s + o.importe, 0);
+    const parking = otrosGastos.filter(o => o.categoria === 'parking').reduce((s, o) => s + o.importe, 0);
+    const peajes = otrosGastos.filter(o => o.categoria === 'peajes').reduce((s, o) => s + o.importe, 0);
+    const aditivos = otrosGastos.filter(o => o.categoria === 'aditivos').reduce((s, o) => s + o.importe, 0);
+    const otros = otrosGastos.filter(o => o.categoria === 'otros').reduce((s, o) => s + o.importe, 0);
     
     container.innerHTML = `
-        <div class="stats-section">
-            <h2>📊 Resumen de Combustible - ${statsView === 'mensual' ? 'Vista Mensual' : 'Vista Anual'}</h2>
-            <table class="stats-table">
-                ${fuelTableHeader}
-                <tbody>
-                    ${fuelTableRows}
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="stats-section">
-            <h2>💰 Gasto Anual en Almacén</h2>
-            <table class="stats-table">
-                <thead>
-                    <tr>
-                        <th>Año</th>
-                        <th>Recambios</th>
-                        <th>Servicios</th>
-                        <th>Total</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${almacenTableRows}
-                </tbody>
-            </table>
-        </div>
+        <table class="financial-table">
+            <tr>
+                <td><span class="category-icon">⛽</span> Combustible</td>
+                <td>${fuel.toFixed(2)} €</td>
+            </tr>
+            <tr>
+                <td><span class="category-icon">📦</span> Recambios (Almacén)</td>
+                <td>${parts.toFixed(2)} €</td>
+            </tr>
+            <tr class="subtotal">
+                <td><strong>Mantenimiento Total</strong></td>
+                <td><strong>${(fuel + parts).toFixed(2)} €</strong></td>
+            </tr>
+            
+            <tr><td colspan="2" style="padding: 8px 0; border: none;"></td></tr>
+            
+            <tr>
+                <td><span class="category-icon">🛡️</span> Seguro</td>
+                <td>${seguro.toFixed(2)} €</td>
+            </tr>
+            <tr>
+                <td><span class="category-icon">🔍</span> ITV</td>
+                <td>${itv.toFixed(2)} €</td>
+            </tr>
+            <tr>
+                <td><span class="category-icon">📋</span> Impuesto Circulación</td>
+                <td>${impuesto.toFixed(2)} €</td>
+            </tr>
+            <tr class="subtotal">
+                <td><strong>Costes Fijos</strong></td>
+                <td><strong>${fixed.toFixed(2)} €</strong></td>
+            </tr>
+            
+            <tr><td colspan="2" style="padding: 8px 0; border: none;"></td></tr>
+            
+            <tr>
+                <td><span class="category-icon">🅿️</span> Parking</td>
+                <td>${parking.toFixed(2)} €</td>
+            </tr>
+            <tr>
+                <td><span class="category-icon">🛣️</span> Peajes</td>
+                <td>${peajes.toFixed(2)} €</td>
+            </tr>
+            <tr>
+                <td><span class="category-icon">🧪</span> Aditivos</td>
+                <td>${aditivos.toFixed(2)} €</td>
+            </tr>
+            <tr>
+                <td><span class="category-icon">📝</span> Otros</td>
+                <td>${otros.toFixed(2)} €</td>
+            </tr>
+            <tr class="subtotal">
+                <td><strong>Costes Variables</strong></td>
+                <td><strong>${variable.toFixed(2)} €</strong></td>
+            </tr>
+            
+            <tr><td colspan="2" style="padding: 12px 0; border: none;"></td></tr>
+            
+            <tr class="grand-total">
+                <td>💶 GASTO TOTAL ${selectedYear}</td>
+                <td>${total.toFixed(2)} €</td>
+            </tr>
+        </table>
     `;
 }
 
@@ -1066,11 +1392,12 @@ function getMonthName(month) {
     return months[month - 1];
 }
 
-// ===== EXPORT =====
+// ===== EXPORT CSV =====
 async function exportToCSV() {
     const repostajes = await getAllRecords('repostajes');
     const almacen = await getAllRecords('almacen');
     const taller = await getAllRecords('taller');
+    const otrosGastos = await getAllRecords('otros_gastos');
     
     let csv = '';
     
@@ -1100,6 +1427,16 @@ async function exportToCSV() {
         csv += `${t.matricula || 'N/A'},${t.fecha_montaje},${t.km_montaje},${t.recambio_instalado},${t.cantidad_usada || ''},${notas}\n`;
     });
     
+    csv += '\n\n';
+    
+    // Otros Gastos
+    csv += 'OTROS GASTOS\n';
+    csv += 'Matrícula,Fecha,Categoría,Descripción,Importe €\n';
+    otrosGastos.forEach(o => {
+        const desc = (o.descripcion || '').replace(/,/g, ';');
+        csv += `${o.matricula || 'N/A'},${o.fecha},${o.categoria},${desc},${o.importe}\n`;
+    });
+    
     // Download
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = window.URL.createObjectURL(blob);
@@ -1115,33 +1452,37 @@ async function updateStats() {
     const allRepostajes = await getAllRecords('repostajes');
     const allAlmacen = await getAllRecords('almacen');
     const allTaller = await getAllRecords('taller');
+    const allOtros = await getAllRecords('otros_gastos');
     
     // Filter by active vehicle if one is selected
     const repostajes = activeVehicle ? allRepostajes.filter(r => r.matricula === activeVehicle) : allRepostajes;
     const almacen = activeVehicle ? allAlmacen.filter(a => a.matricula === activeVehicle) : allAlmacen;
     const taller = activeVehicle ? allTaller.filter(t => t.matricula === activeVehicle) : allTaller;
+    const otros = activeVehicle ? allOtros.filter(o => o.matricula === activeVehicle) : allOtros;
     
     const statsContainer = document.getElementById('stats-content');
-    statsContainer.innerHTML = `
-        <div class="stats-grid">
-            <div class="stat-item">
-                <div class="stat-value">${repostajes.length}</div>
-                <div class="stat-label">Repostajes</div>
+    if (statsContainer) {
+        statsContainer.innerHTML = `
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value">${repostajes.length}</div>
+                    <div class="stat-label">Repostajes</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${almacen.length}</div>
+                    <div class="stat-label">Recambios</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${taller.length}</div>
+                    <div class="stat-label">Trabajos</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${otros.length}</div>
+                    <div class="stat-label">Otros Gastos</div>
+                </div>
             </div>
-            <div class="stat-item">
-                <div class="stat-value">${almacen.length}</div>
-                <div class="stat-label">Recambios</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value">${taller.length}</div>
-                <div class="stat-label">Trabajos</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value">${almacen.filter(a => a.estado === 'En Stock' && a.cantidad_comprada > 0).length}</div>
-                <div class="stat-label">En Stock</div>
-            </div>
-        </div>
-    `;
+        `;
+    }
 }
 
 // Modal
@@ -1153,15 +1494,15 @@ function closeModal() {
 
 // ===== NO VEHICLE STATE =====
 function showNoVehicleMessage() {
-    const tabs = ['repostajes', 'almacen', 'taller', 'estadisticas'];
+    const tabs = ['repostajes', 'almacen', 'taller', 'otros', 'estadisticas'];
     tabs.forEach(tab => {
-        const container = document.getElementById(`${tab}-list`) || document.getElementById(`${tab}-content`);
+        const container = document.getElementById(`${tab}-list`) || document.getElementById(`${tab}-content`) || document.getElementById('financial-table-container');
         if (container) {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">🚗</div>
                     <div class="empty-state-text">No hay vehículo seleccionado</div>
-                    <div class="empty-state-subtext">Ve a la pestaña "Vehículos" para añadir tu primer vehículo</div>
+                    <div class="empty-state-subtext">Ve a la pestaña "Coches" para añadir tu primer vehículo</div>
                 </div>
             `;
         }
@@ -1354,6 +1695,7 @@ async function saveVehiculo(event) {
         
         closeModal();
         await loadVehicles();
+        populateYearSelector();
         
         // Reload all data if this is now the active vehicle
         if (activeVehicle === data.matricula) {
@@ -1420,7 +1762,7 @@ async function confirmReset() {
         return;
     }
     
-    if (!confirm('Última confirmación: ¿Realmente quieres borrar TODO (vehículos, repostajes, recambios, trabajos)?')) {
+    if (!confirm('Última confirmación: ¿Realmente quieres borrar TODO (vehículos, repostajes, recambios, trabajos, otros gastos)?')) {
         return;
     }
     

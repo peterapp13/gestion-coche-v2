@@ -11,6 +11,8 @@
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="stylesheet" href="styles.css">
+    <!-- Chart.js for professional charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <!-- Global Header with Vehicle Selector and Sync -->
@@ -84,7 +86,7 @@
     <nav class="bottom-nav">
         <button class="nav-btn active" data-tab="repostajes">
             <span class="icon">⛽</span>
-            <span>Repostajes</span>
+            <span>Fuel</span>
         </button>
         <button class="nav-btn" data-tab="almacen">
             <span class="icon">📦</span>
@@ -94,17 +96,17 @@
             <span class="icon">🔧</span>
             <span>Taller</span>
         </button>
-        <button class="nav-btn" data-tab="vehiculos">
-            <span class="icon">🚙</span>
-            <span>Vehículos</span>
+        <button class="nav-btn" data-tab="otros">
+            <span class="icon">💰</span>
+            <span>Gastos</span>
         </button>
         <button class="nav-btn" data-tab="estadisticas">
-            <span class="icon">📈</span>
+            <span class="icon">📊</span>
             <span>Stats</span>
         </button>
-        <button class="nav-btn" data-tab="export">
-            <span class="icon">📊</span>
-            <span>Exportar</span>
+        <button class="nav-btn" data-tab="vehiculos">
+            <span class="icon">🚙</span>
+            <span>Coches</span>
         </button>
     </nav>
 
@@ -137,6 +139,15 @@
             <div id="taller-list" class="records-list"></div>
         </div>
 
+        <!-- Otros Gastos Tab (NEW) -->
+        <div class="tab-content" id="otros">
+            <div class="header">
+                <h1>💰 Otros Gastos</h1>
+                <button class="btn-add" onclick="showOtrosGastosForm()">+</button>
+            </div>
+            <div id="otros-list" class="records-list"></div>
+        </div>
+
         <!-- Vehículos Tab -->
         <div class="tab-content" id="vehiculos">
             <div class="header">
@@ -144,45 +155,69 @@
                 <button class="btn-add" onclick="showVehiculoForm()">+</button>
             </div>
             <div id="vehiculos-list" class="records-list"></div>
-        </div>
-
-        <!-- Estadísticas Tab -->
-        <div class="tab-content" id="estadisticas">
-            <div class="header">
-                <h1>📈 Estadísticas</h1>
-            </div>
-            <div class="stats-controls">
-                <label class="toggle-label">Vista de Combustible:</label>
-                <div class="toggle-buttons">
-                    <button class="toggle-btn active" data-view="mensual" onclick="changeStatsView('mensual')">Mensual</button>
-                    <button class="toggle-btn" data-view="anual" onclick="changeStatsView('anual')">Anual</button>
-                </div>
-            </div>
-            <div id="estadisticas-content" class="stats-container"></div>
-        </div>
-
-        <!-- Export Tab -->
-        <div class="tab-content" id="export">
-            <div class="header">
-                <h1>📊 Exportar Datos</h1>
-            </div>
-            <div class="export-container">
+            
+            <!-- Export/Reset Section -->
+            <div class="export-container" style="margin-top: 24px;">
                 <div class="export-card">
-                    <h2>Exportar a CSV/Excel</h2>
-                    <p>Descarga todos tus datos en formato CSV compatible con Excel y Google Sheets</p>
-                    <button class="btn-export" onclick="exportToCSV()">📥 Descargar CSV</button>
+                    <h2>📥 Exportar a CSV</h2>
+                    <p>Descarga todos tus datos en formato CSV</p>
+                    <button class="btn-export" onclick="exportToCSV()">Descargar CSV</button>
                 </div>
                 
                 <div class="export-card danger-zone">
                     <h2>⚠️ Zona Peligrosa</h2>
-                    <p>Esta acción eliminará TODOS los datos de la aplicación de forma permanente</p>
+                    <p>Elimina TODOS los datos permanentemente</p>
                     <button class="btn-danger" onclick="confirmReset()">🗑️ Borrar Todo</button>
                 </div>
-                
-                <div class="stats-card">
-                    <h3>Estadísticas Generales</h3>
-                    <div id="stats-content"></div>
+            </div>
+        </div>
+
+        <!-- Estadísticas Tab (UPGRADED) -->
+        <div class="tab-content" id="estadisticas">
+            <div class="header">
+                <h1>📊 Control Financiero</h1>
+            </div>
+            
+            <!-- Year/View Filter -->
+            <div class="stats-controls">
+                <div class="filter-row">
+                    <label class="toggle-label">Período:</label>
+                    <div class="toggle-buttons">
+                        <button class="toggle-btn active" data-view="anual" onclick="changeStatsView('anual')">Anual</button>
+                        <button class="toggle-btn" data-view="mensual" onclick="changeStatsView('mensual')">Mensual</button>
+                    </div>
                 </div>
+                <div class="year-selector">
+                    <label>Año:</label>
+                    <select id="stats-year-selector" onchange="loadEstadisticas()">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Charts Section -->
+            <div class="charts-section">
+                <!-- Pie Chart - Expense Distribution -->
+                <div class="chart-card">
+                    <h3>🥧 Distribución de Gastos</h3>
+                    <div class="chart-container">
+                        <canvas id="pieChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Bar Chart - Monthly Comparison -->
+                <div class="chart-card">
+                    <h3>📊 Gasto Mensual</h3>
+                    <div class="chart-container chart-bar">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Financial Summary Table -->
+            <div class="financial-summary">
+                <h3>💶 Resumen Financiero</h3>
+                <div id="financial-table-container"></div>
             </div>
         </div>
     </main>
