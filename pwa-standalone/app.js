@@ -52,7 +52,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Only load data if we have an active vehicle
             if (activeVehicle) {
                 await loadAllData();
-                loadEstadisticas();
+                // Force render charts immediately after data load
+                await loadEstadisticas();
             } else {
                 showNoVehicleMessage();
             }
@@ -160,7 +161,8 @@ async function confirmImport() {
             
             if (activeVehicle) {
                 await loadAllData();
-                loadEstadisticas();
+                // Force render charts immediately after import
+                await loadEstadisticas();
             }
             
             // Update app stats
