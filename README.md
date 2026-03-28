@@ -1,86 +1,129 @@
-# 🚗 Gestión de Vehículo - Complete Project
+# Gestión de Vehículo - PWA Standalone
 
-## 📦 Project Structure
+## 🚗 Aplicación Web Progresiva para Gestión de Vehículos
 
-This repository contains **TWO VERSIONS** of the same vehicle management application:
+### Características:
 
-### 1. 🌐 PWA Standalone (Recommended for Personal Use)
-**Location:** `/pwa-standalone/`
+✅ **Sin dependencias externas** - Funciona 100% offline
+✅ **Sin backend** - Todos los datos se guardan localmente (IndexedDB)
+✅ **Sin autenticación** - Privacidad total, datos solo en tu dispositivo
+✅ **PWA Completa** - Instalable en móvil y desktop
+✅ **CRUD Completo** - Crear, Leer, Actualizar y Eliminar en todos los módulos
+✅ **Auto-cálculos** - KM Gastados y Consumo (L/100km) automáticos
+✅ **Exportar a CSV** - Descarga todos tus datos
 
-**Features:**
-- ✅ **100% Offline** - Works without internet
-- ✅ **No Backend Required** - Pure frontend with IndexedDB
-- ✅ **No Authentication** - Complete privacy, data stays on device
-- ✅ **Full CRUD** - Create, Read, Update, Delete in all modules
-- ✅ **Auto-calculations** - KM Gastados & Consumo (L/100km)
-- ✅ **CSV Export** - Download all your data
-- ✅ **Installable PWA** - Add to home screen on any device
-- ✅ **Dark Mode** - Professional UI optimized for workshop use
-- ✅ **Responsive** - Works on iPhone, iPad, Android, and Desktop
+### Módulos:
 
-**Quick Start:**
+1. **⛽ Repostajes**
+   - Registro completo de repostajes
+   - Cálculo automático de KM gastados
+   - Cálculo automático de consumo (L/100km)
+   - Editar y eliminar registros
+
+2. **📦 Almacén**
+   - Gestión de recambios
+   - Estados: Pendiente / Instalado
+   - Editar y eliminar piezas
+
+3. **🔧 Taller**
+   - Registro de mantenimiento
+   - KM y fecha de instalación
+   - Notas técnicas
+   - Editar y eliminar trabajos
+
+4. **📊 Exportar**
+   - Exportar todos los datos a CSV
+   - Compatible con Excel y Google Sheets
+   - Estadísticas generales
+
+### Instalación:
+
+**iPhone/iPad:**
+1. Abre Safari
+2. Navega a la URL
+3. Toca el botón Compartir (📤)
+4. Selecciona "Añadir a pantalla de inicio"
+
+**Android:**
+1. Abre Chrome
+2. Navega a la URL
+3. Toca el menú (⋮)
+4. Selecciona "Instalar app"
+
+**Desktop:**
+1. Abre Chrome/Edge
+2. Navega a la URL
+3. Clic en el icono de instalación (⊕) en la barra de direcciones
+
+### Tecnologías:
+
+- **HTML5** - Estructura semántica
+- **CSS3** - Diseño responsive y dark mode
+- **JavaScript ES6+** - Lógica de aplicación
+- **IndexedDB** - Almacenamiento local de datos
+- **Service Worker** - Funcionalidad offline
+- **Web App Manifest** - Instalación como PWA
+
+### Uso:
+
+1. **Añadir registros**: Toca el botón "+" en cada sección
+2. **Editar**: Toca el botón ✏️ en cualquier registro
+3. **Eliminar**: Toca el botón 🗑️ (confirmación requerida)
+4. **Exportar**: Ve a la sección Exportar y descarga el CSV
+
+### Privacidad:
+
+🔒 **Todos los datos se almacenan SOLO en tu dispositivo**
+- No hay servidor
+- No hay base de datos en la nube
+- No se envía información a internet
+- Privacidad total
+
+### Backup:
+
+💾 **Importante**: Como los datos están solo en tu dispositivo:
+- Exporta regularmente a CSV
+- Guarda los archivos CSV en la nube (Google Drive, iCloud, etc.)
+- Al cambiar de dispositivo, puedes importar los datos manualmente
+
+### Archivos del proyecto:
+
+```
+pwa-standalone/
+├── index.html        # Página principal
+├── styles.css        # Estilos (dark mode, responsive)
+├── app.js            # Lógica de la aplicación
+├── db.js             # Gestión de IndexedDB
+├── sw.js             # Service Worker (offline)
+├── manifest.json     # Web App Manifest (PWA)
+├── icon-192.png      # Icono 192x192
+├── icon-512.png      # Icono 512x512
+└── README.md         # Este archivo
+```
+
+### Desarrollo:
+
+Para ejecutar localmente:
+
 ```bash
-cd pwa-standalone
+# Servidor simple con Python
 python -m http.server 8000
-# Open http://localhost:8000
+
+# O con Node.js
+npx http-server
 ```
 
----
+Luego abre: `http://localhost:8000`
 
-### 2. ☁️ Cloud Version (Expo + FastAPI + MongoDB)
-**Location:** `/frontend/` and `/backend/`
+### Soporte de navegadores:
 
-**Features:**
-- ✅ **Multi-user** - Google OAuth authentication
-- ✅ **Cloud sync** - Data synced across all devices
-- ✅ **Mobile Native** - Built with Expo/React Native
-- ✅ **Backend API** - FastAPI with MongoDB
+✅ Chrome/Edge 90+
+✅ Firefox 88+
+✅ Safari 14+ (iOS/macOS)
+✅ Samsung Internet 14+
 
 ---
 
-## 🚀 Quick Deploy PWA Standalone
-
-**GitHub Pages (Free):**
-```bash
-# The PWA standalone version is ready to deploy!
-# Just push to GitHub and enable GitHub Pages
-```
-
-**Run Locally:**
-```bash
-cd pwa-standalone
-python -m http.server 8000
-```
-
----
-
-## 📱 Features
-
-### ⛽ Repostajes (Fuel)
-- Full CRUD (Create, Read, Update, Delete)
-- Auto-calculates KM Gastados
-- Auto-calculates Consumo (L/100km)
-
-### 📦 Almacén (Parts)
-- Full CRUD operations
-- Status tracking (Pending/Installed)
-
-### 🔧 Taller (Workshop)
-- Full CRUD operations
-- Maintenance history with notes
-
-### 📊 Export
-- Download all data to CSV
-- Compatible with Excel/Google Sheets
-
----
-
-## 📖 Full Documentation
-
-See `/pwa-standalone/README.md` for complete PWA documentation.
-
----
-
-**Version**: 1.0.0  
-**License**: MIT  
-**Enjoy managing your vehicle! 🚗💨**
+**Versión**: 1.0.0  
+**Licencia**: MIT  
+**Autor**: Gestión de Vehículo PWA
