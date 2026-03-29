@@ -1261,3 +1261,153 @@ body {
     color: #9CA3AF;
     margin-top: 4px;
 }
+
+/* ===== COMPACT LIST VIEW ===== */
+.list-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: #1A1A1A;
+    border-radius: 12px;
+    margin-bottom: 12px;
+}
+
+.list-filter label {
+    color: #9CA3AF;
+    font-size: 14px;
+}
+
+.list-filter select {
+    padding: 8px 12px;
+    background: #0A0A0A;
+    border: 1px solid #2A2A2A;
+    border-radius: 8px;
+    color: #FFFFFF;
+    font-size: 14px;
+    min-width: 100px;
+}
+
+.filter-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: #6B7280;
+}
+
+.list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: #1A1A1A;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.list-item {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    background: #1A1A1A;
+    border-bottom: 1px solid #252525;
+    cursor: pointer;
+    transition: background 0.15s;
+    gap: 12px;
+}
+
+.list-item:last-child {
+    border-bottom: none;
+}
+
+.list-item:active {
+    background: #252525;
+}
+
+.list-item-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.list-item-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #FFFFFF;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.list-item-subtitle {
+    font-size: 12px;
+    color: #6B7280;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.list-item-data {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.list-item-amount {
+    font-size: 15px;
+    font-weight: 600;
+    color: #4285F4;
+}
+
+.list-item-amount.expense {
+    color: #EF4444;
+}
+
+.list-item-detail {
+    font-size: 11px;
+    color: #6B7280;
+    margin-top: 2px;
+}
+
+.list-item-detail.status-en-stock {
+    color: #10B981;
+}
+
+.list-item-detail.status-agotado-instalado {
+    color: #F59E0B;
+}
+
+.list-item-detail.status-servicio {
+    color: #EF4444;
+}
+
+.list-item-delete {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: transparent;
+    border: none;
+    color: #EF4444;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.list-item-delete:active {
+    background: rgba(239, 68, 68, 0.2);
+    opacity: 1;
+}
+
+.empty-state.small {
+    padding: 40px 20px;
+}
+
+.empty-state.small .empty-state-text {
+    font-size: 14px;
+}
+
+/* List scrolling */
+.records-list {
+    padding: 0 16px 16px;
+}

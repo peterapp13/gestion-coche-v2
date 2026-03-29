@@ -6,6 +6,12 @@ let statsView = 'anual'; // 'mensual' or 'anual'
 let lastSyncTime = null; // Track last sync time
 let selectedYear = new Date().getFullYear();
 
+// Filter years for each tab (2024-2050)
+let filterYearRepostajes = 'all';
+let filterYearAlmacen = 'all';
+let filterYearTaller = 'all';
+let filterYearOtros = 'all';
+
 // Chart instances (to destroy before re-creating)
 let pieChartInstance = null;
 let barChartInstance = null;
@@ -20,6 +26,15 @@ const EXPENSE_CATEGORIES = [
     { value: 'aditivos', label: 'Aditivos', icon: '🧪', type: 'variable' },
     { value: 'otros', label: 'Otros', icon: '📝', type: 'variable' }
 ];
+
+// Generate year options HTML (2024-2050)
+function getYearFilterOptions(selectedValue = 'all') {
+    let options = `<option value="all" ${selectedValue === 'all' ? 'selected' : ''}>Todos</option>`;
+    for (let y = 2024; y <= 2050; y++) {
+        options += `<option value="${y}" ${selectedValue == y ? 'selected' : ''}>${y}</option>`;
+    }
+    return options;
+}
 
 // Initialize App
 document.addEventListener('DOMContentLoaded', async () => {
@@ -301,9 +316,11 @@ async function loadAppStats() {
 
 // ===== REPOSTAJES =====
 async function loadRepostajes() {
+    const container = document.getElementById('repostajes-list');
+    if (!container) return;
+    
     // Don't try to load if no active vehicle
     if (!activeVehicle) {
-        const container = document.getElementById('repostajes-list');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🚗</div>
@@ -315,26 +332,45 @@ async function loadRepostajes() {
     }
     
     const records = await getAllRecords('repostajes');
-    // Filter by active vehicle - but allow records without matricula for backward compatibility
-    const vehicleRecords = records.filter(r => !r.matricula || r.matricula === activeVehicle);
-    vehicleRecords.sort((a, b) => b.km_actuales - a.km_actuales);
+    // Filter by active vehicle
+    let vehicleRecords = records.filter(r => !r.matricula || r.matricula === activeVehicle);
+    
+    // Apply year filter
+    if (filterYearRepostajes !== 'all') {
+        vehicleRecords = vehicleRecords.filter(r => {
+            if (!r.fecha) return false;
+            const year = new Date(r.fecha).getFullYear();
+            return year == filterYearRepostajes;
+        });
+    }
+    
+    vehicleRecords.sort((a, b) => (b.km_actuales || 0) - (a.km_actuales || 0));
     
     // Calculate KM gastados and consumo for each record
     for (let i = 0; i < vehicleRecords.length; i++) {
         if (i < vehicleRecords.length - 1) {
             const current = vehicleRecords[i];
             const previous = vehicleRecords[i + 1];
-            const kmGastados = current.km_actuales - previous.km_actuales;
+            const kmGastados = (current.km_actuales || 0) - (previous.km_actuales || 0);
             vehicleRecords[i].km_gastados = kmGastados;
-            if (kmGastados > 0) {
+            if (kmGastados > 0 && current.litros) {
                 vehicleRecords[i].consumo = ((current.litros / kmGastados) * 100).toFixed(2);
             }
         }
     }
     
-    const container = document.getElementById('repostajes-list');
+    // Year filter HTML
+    const filterHtml = `
+        <div class="list-filter">
+            <label>Año:</label>
+            <select onchange="filterYearRepostajes = this.value; loadRepostajes();">
+                ${getYearFilterOptions(filterYearRepostajes)}
+            </select>
+            <span class="filter-count">${vehicleRecords.length} registros</span>
+        </div>
+    `;
     
-    if (vehicleRecords.length === 0) {
+    if (vehicleRecords.length === 0 && filterYearRepostajes === 'all') {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">⛽</div>
@@ -345,54 +381,23 @@ async function loadRepostajes() {
         return;
     }
     
-    container.innerHTML = vehicleRecords.map(r => `
-        <div class="record-card">
-            <div class="record-header">
-                <div>
-                    <div class="record-title">${r.gasolinera}</div>
-                    <div class="record-subtitle">Factura: ${r.numero_factura}</div>
-                </div>
-                <div class="record-actions">
-                    <button class="btn-edit" onclick="editRepostaje(${r.id})">✏️</button>
-                    <button class="btn-delete" onclick="deleteRepostaje(${r.id})">🗑️</button>
-                </div>
+    const listHtml = vehicleRecords.length === 0 
+        ? `<div class="empty-state small"><div class="empty-state-text">No hay datos en ${filterYearRepostajes}</div></div>`
+        : vehicleRecords.map(r => `
+        <div class="list-item" onclick="editRepostaje(${r.id})">
+            <div class="list-item-main">
+                <div class="list-item-title">${r.gasolinera || 'Sin nombre'}</div>
+                <div class="list-item-subtitle">${r.fecha || 'Sin fecha'} · ${(r.km_actuales || 0).toLocaleString()} km</div>
             </div>
-            <div class="record-body">
-                <div class="record-row">
-                    <span class="record-label">Fecha:</span>
-                    <span class="record-value">${r.fecha}</span>
-                </div>
-                <div class="record-row">
-                    <span class="record-label">KM Actuales:</span>
-                    <span class="record-value">${r.km_actuales.toLocaleString()} km</span>
-                </div>
-                ${r.km_gastados ? `
-                <div class="record-row">
-                    <span class="record-label">KM Gastados:</span>
-                    <span class="record-value highlight">${r.km_gastados} km</span>
-                </div>
-                ` : ''}
-                <div class="record-row">
-                    <span class="record-label">Litros:</span>
-                    <span class="record-value">${r.litros} L</span>
-                </div>
-                ${r.consumo ? `
-                <div class="record-row">
-                    <span class="record-label">Consumo:</span>
-                    <span class="record-value highlight">${r.consumo} L/100km</span>
-                </div>
-                ` : ''}
-                <div class="record-row">
-                    <span class="record-label">Precio/L:</span>
-                    <span class="record-value">${r.precio_litro.toFixed(2)} €</span>
-                </div>
-                <div class="record-row">
-                    <span class="record-label">Total:</span>
-                    <span class="record-value" style="color: #4285F4; font-weight: bold;">${r.total_euros.toFixed(2)} €</span>
-                </div>
+            <div class="list-item-data">
+                <div class="list-item-amount">${(r.total_euros || 0).toFixed(2)} €</div>
+                <div class="list-item-detail">${(r.litros || 0).toFixed(1)} L ${r.consumo ? `· ${r.consumo} L/100` : ''}</div>
             </div>
+            <button class="list-item-delete" onclick="event.stopPropagation(); deleteRepostaje(${r.id})">🗑️</button>
         </div>
     `).join('');
+    
+    container.innerHTML = filterHtml + `<div class="list-container">${listHtml}</div>`;
 }
 
 function showRepostajeForm(id = null) {
@@ -516,8 +521,10 @@ async function deleteRepostaje(id) {
 
 // ===== ALMACÉN =====
 async function loadAlmacen() {
+    const container = document.getElementById('almacen-list');
+    if (!container) return;
+    
     if (!activeVehicle) {
-        const container = document.getElementById('almacen-list');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🚗</div>
@@ -529,12 +536,31 @@ async function loadAlmacen() {
     }
     
     const records = await getAllRecords('almacen');
-    const vehicleRecords = records.filter(r => r.matricula === activeVehicle);
-    vehicleRecords.sort((a, b) => new Date(b.fecha_compra) - new Date(a.fecha_compra));
+    let vehicleRecords = records.filter(r => r.matricula === activeVehicle);
     
-    const container = document.getElementById('almacen-list');
+    // Apply year filter
+    if (filterYearAlmacen !== 'all') {
+        vehicleRecords = vehicleRecords.filter(r => {
+            if (!r.fecha_compra) return false;
+            const year = new Date(r.fecha_compra).getFullYear();
+            return year == filterYearAlmacen;
+        });
+    }
     
-    if (vehicleRecords.length === 0) {
+    vehicleRecords.sort((a, b) => new Date(b.fecha_compra || 0) - new Date(a.fecha_compra || 0));
+    
+    // Year filter HTML
+    const filterHtml = `
+        <div class="list-filter">
+            <label>Año:</label>
+            <select onchange="filterYearAlmacen = this.value; loadAlmacen();">
+                ${getYearFilterOptions(filterYearAlmacen)}
+            </select>
+            <span class="filter-count">${vehicleRecords.length} registros</span>
+        </div>
+    `;
+    
+    if (vehicleRecords.length === 0 && filterYearAlmacen === 'all') {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">📦</div>
@@ -545,38 +571,28 @@ async function loadAlmacen() {
         return;
     }
     
-    container.innerHTML = vehicleRecords.map(r => `
-        <div class="record-card">
-            <div class="record-header">
-                <div>
-                    <div class="record-title">${r.recambio}</div>
-                    <div class="record-subtitle">${r.marca}</div>
-                </div>
-                <div class="record-actions">
-                    <span class="status-badge">
-                        <span class="status-dot ${r.estado.toLowerCase().replace(' ', '-').replace('/', '-')}"></span>
-                        ${r.estado}
-                    </span>
-                    <button class="btn-edit" onclick="editAlmacen(${r.id})">✏️</button>
-                    <button class="btn-delete" onclick="deleteAlmacen(${r.id})">🗑️</button>
-                </div>
+    const getStatusClass = (estado) => {
+        if (!estado) return '';
+        return estado.toLowerCase().replace(' ', '-').replace('/', '-');
+    };
+    
+    const listHtml = vehicleRecords.length === 0
+        ? `<div class="empty-state small"><div class="empty-state-text">No hay datos en ${filterYearAlmacen}</div></div>`
+        : vehicleRecords.map(r => `
+        <div class="list-item" onclick="editAlmacen(${r.id})">
+            <div class="list-item-main">
+                <div class="list-item-title">${r.recambio || 'Sin nombre'}</div>
+                <div class="list-item-subtitle">${r.marca || ''} · ${r.fecha_compra || 'Sin fecha'}</div>
             </div>
-            <div class="record-body">
-                <div class="record-row">
-                    <span class="record-label">Fecha de Compra:</span>
-                    <span class="record-value">${r.fecha_compra}</span>
-                </div>
-                <div class="record-row">
-                    <span class="record-label">Cantidad:</span>
-                    <span class="record-value">${r.cantidad_comprada || 0} unidades</span>
-                </div>
-                <div class="record-row">
-                    <span class="record-label">Coste:</span>
-                    <span class="record-value" style="color: #4285F4; font-weight: bold;">${r.coste_euros.toFixed(2)} €</span>
-                </div>
+            <div class="list-item-data">
+                <div class="list-item-amount">${(r.coste_euros || 0).toFixed(2)} €</div>
+                <div class="list-item-detail status-${getStatusClass(r.estado)}">${r.cantidad_comprada || 0} uds · ${r.estado || 'N/A'}</div>
             </div>
+            <button class="list-item-delete" onclick="event.stopPropagation(); deleteAlmacen(${r.id})">🗑️</button>
         </div>
     `).join('');
+    
+    container.innerHTML = filterHtml + `<div class="list-container">${listHtml}</div>`;
 }
 
 function showAlmacenForm(id = null) {
@@ -689,8 +705,10 @@ async function deleteAlmacen(id) {
 
 // ===== TALLER =====
 async function loadTaller() {
+    const container = document.getElementById('taller-list');
+    if (!container) return;
+    
     if (!activeVehicle) {
-        const container = document.getElementById('taller-list');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🚗</div>
@@ -702,12 +720,31 @@ async function loadTaller() {
     }
     
     const records = await getAllRecords('taller');
-    const vehicleRecords = records.filter(r => r.matricula === activeVehicle);
-    vehicleRecords.sort((a, b) => b.km_montaje - a.km_montaje);
+    let vehicleRecords = records.filter(r => r.matricula === activeVehicle);
     
-    const container = document.getElementById('taller-list');
+    // Apply year filter
+    if (filterYearTaller !== 'all') {
+        vehicleRecords = vehicleRecords.filter(r => {
+            if (!r.fecha_montaje) return false;
+            const year = new Date(r.fecha_montaje).getFullYear();
+            return year == filterYearTaller;
+        });
+    }
     
-    if (vehicleRecords.length === 0) {
+    vehicleRecords.sort((a, b) => (b.km_montaje || 0) - (a.km_montaje || 0));
+    
+    // Year filter HTML
+    const filterHtml = `
+        <div class="list-filter">
+            <label>Año:</label>
+            <select onchange="filterYearTaller = this.value; loadTaller();">
+                ${getYearFilterOptions(filterYearTaller)}
+            </select>
+            <span class="filter-count">${vehicleRecords.length} registros</span>
+        </div>
+    `;
+    
+    if (vehicleRecords.length === 0 && filterYearTaller === 'all') {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🔧</div>
@@ -718,38 +755,23 @@ async function loadTaller() {
         return;
     }
     
-    container.innerHTML = vehicleRecords.map(r => `
-        <div class="record-card">
-            <div class="record-header">
-                <div>
-                    <div class="record-title">${r.recambio_instalado}</div>
-                    <div class="record-subtitle">Fecha: ${r.fecha_montaje}</div>
-                </div>
-                <div class="record-actions">
-                    <button class="btn-edit" onclick="editTaller(${r.id})">✏️</button>
-                    <button class="btn-delete" onclick="deleteTaller(${r.id})">🗑️</button>
-                </div>
+    const listHtml = vehicleRecords.length === 0
+        ? `<div class="empty-state small"><div class="empty-state-text">No hay datos en ${filterYearTaller}</div></div>`
+        : vehicleRecords.map(r => `
+        <div class="list-item" onclick="editTaller(${r.id})">
+            <div class="list-item-main">
+                <div class="list-item-title">${r.recambio_instalado || 'Sin nombre'}</div>
+                <div class="list-item-subtitle">${r.fecha_montaje || 'Sin fecha'} · ${(r.km_montaje || 0).toLocaleString()} km</div>
             </div>
-            <div class="record-body">
-                <div class="record-row">
-                    <span class="record-label">KM de Montaje:</span>
-                    <span class="record-value">${r.km_montaje.toLocaleString()} km</span>
-                </div>
-                ${r.cantidad_usada ? `
-                <div class="record-row">
-                    <span class="record-label">Cantidad Usada:</span>
-                    <span class="record-value">${r.cantidad_usada} unidades</span>
-                </div>
-                ` : ''}
-                ${r.notas ? `
-                <div style="margin-top: 12px; padding: 12px; background: #0A0A0A; border-radius: 8px;">
-                    <div class="record-label" style="margin-bottom: 4px;">Notas:</div>
-                    <div class="record-value">${r.notas}</div>
-                </div>
-                ` : ''}
+            <div class="list-item-data">
+                <div class="list-item-amount">${r.cantidad_usada || 1} uds</div>
+                <div class="list-item-detail">${r.notas ? '📝' : ''}</div>
             </div>
+            <button class="list-item-delete" onclick="event.stopPropagation(); deleteTaller(${r.id})">🗑️</button>
         </div>
     `).join('');
+    
+    container.innerHTML = filterHtml + `<div class="list-container">${listHtml}</div>`;
 }
 
 async function showTallerForm(id = null) {
@@ -917,30 +939,48 @@ async function deleteTaller(id) {
     }
 }
 
-// ===== OTROS GASTOS (FIX) =====
+// ===== OTROS GASTOS =====
 async function loadOtrosGastos() {
+    const container = document.getElementById('otros-list');
+    if (!container) return;
+    
     if (!activeVehicle) {
-        const container = document.getElementById('otros-list');
-        if (container) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">🚗</div>
-                    <div class="empty-state-text">No hay vehículo seleccionado</div>
-                    <div class="empty-state-subtext">Selecciona un vehículo en el menú superior</div>
-                </div>
-            `;
-        }
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚗</div>
+                <div class="empty-state-text">No hay vehículo seleccionado</div>
+                <div class="empty-state-subtext">Selecciona un vehículo en el menú superior</div>
+            </div>
+        `;
         return;
     }
     
     const records = await getAllRecords('otros_gastos');
-    const vehicleRecords = records.filter(r => r.matricula === activeVehicle);
-    vehicleRecords.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    let vehicleRecords = records.filter(r => r.matricula === activeVehicle);
     
-    const container = document.getElementById('otros-list');
-    if (!container) return;
+    // Apply year filter
+    if (filterYearOtros !== 'all') {
+        vehicleRecords = vehicleRecords.filter(r => {
+            if (!r.fecha) return false;
+            const year = new Date(r.fecha).getFullYear();
+            return year == filterYearOtros;
+        });
+    }
     
-    if (vehicleRecords.length === 0) {
+    vehicleRecords.sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0));
+    
+    // Year filter HTML
+    const filterHtml = `
+        <div class="list-filter">
+            <label>Año:</label>
+            <select onchange="filterYearOtros = this.value; loadOtrosGastos();">
+                ${getYearFilterOptions(filterYearOtros)}
+            </select>
+            <span class="filter-count">${vehicleRecords.length} registros</span>
+        </div>
+    `;
+    
+    if (vehicleRecords.length === 0 && filterYearOtros === 'all') {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">💰</div>
@@ -951,33 +991,25 @@ async function loadOtrosGastos() {
         return;
     }
     
-    container.innerHTML = vehicleRecords.map(r => {
-        const category = EXPENSE_CATEGORIES.find(c => c.value === r.categoria) || { icon: '📝', label: r.categoria };
+    const listHtml = vehicleRecords.length === 0
+        ? `<div class="empty-state small"><div class="empty-state-text">No hay datos en ${filterYearOtros}</div></div>`
+        : vehicleRecords.map(r => {
+        const category = EXPENSE_CATEGORIES.find(c => c.value === r.categoria) || { icon: '📝', label: r.categoria || 'Otro' };
         return `
-            <div class="record-card">
-                <div class="record-header">
-                    <div>
-                        <div class="record-title">${category.icon} ${r.descripcion}</div>
-                        <span class="category-badge ${r.categoria}">${category.label}</span>
-                    </div>
-                    <div class="record-actions">
-                        <button class="btn-edit" onclick="editOtrosGastos(${r.id})">✏️</button>
-                        <button class="btn-delete" onclick="deleteOtrosGastos(${r.id})">🗑️</button>
-                    </div>
-                </div>
-                <div class="record-body">
-                    <div class="record-row">
-                        <span class="record-label">Fecha:</span>
-                        <span class="record-value">${r.fecha}</span>
-                    </div>
-                    <div class="record-row">
-                        <span class="record-label">Importe:</span>
-                        <span class="record-value" style="color: #EF4444; font-weight: bold;">${r.importe.toFixed(2)} €</span>
-                    </div>
-                </div>
+        <div class="list-item" onclick="editOtrosGastos(${r.id})">
+            <div class="list-item-main">
+                <div class="list-item-title">${category.icon} ${r.descripcion || 'Sin descripción'}</div>
+                <div class="list-item-subtitle">${r.fecha || 'Sin fecha'} · ${category.label}</div>
             </div>
-        `;
+            <div class="list-item-data">
+                <div class="list-item-amount expense">${(r.importe || 0).toFixed(2)} €</div>
+            </div>
+            <button class="list-item-delete" onclick="event.stopPropagation(); deleteOtrosGastos(${r.id})">🗑️</button>
+        </div>
+    `;
     }).join('');
+    
+    container.innerHTML = filterHtml + `<div class="list-container">${listHtml}</div>`;
 }
 
 // FIX: Ensure this function works with click events
