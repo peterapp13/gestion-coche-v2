@@ -870,7 +870,7 @@ function openTallerModal(title, data = {}, availableParts = [], allParts = []) {
             
             <div class="form-section">
                 <label class="form-label">Recambios Instalados</label>
-                ${isEditing ? '<p style="color: #9CA3AF; font-size: 12px; margin-bottom: 12px;">⚠️ Al editar no se modifica el stock del almacén</p>' : ''}
+                ${isEditing ? '<p style="color: #9CA3AF; font-size: 12px; margin-bottom: 12px;">💡 Puedes modificar cantidades. Solo se descontará la diferencia del almacén.</p>' : ''}
                 <div id="lista-recambios">
                     ${partsRowsHtml}
                 </div>
@@ -904,8 +904,8 @@ function createPartRowHtml(index, availableParts, partData = {}, isFirst = false
         const partExists = availableParts.some(p => p.id == partData.almacen_id);
         
         if (!partExists && partData.nombre) {
-            // Part not in stock, show it as a disabled option that's selected
-            partsOptions = `<option value="${partData.almacen_id}" selected disabled>${partData.nombre} (ya instalado)</option>`;
+            // Part not in stock, show it as a special option
+            partsOptions = `<option value="${partData.almacen_id}" selected data-original-qty="${partData.cantidad || 1}">${partData.nombre} (instalado)</option>`;
         }
     }
     
@@ -914,16 +914,17 @@ function createPartRowHtml(index, availableParts, partData = {}, isFirst = false
         `<option value="${part.id}" data-max="${part.cantidad_comprada}" ${partData.almacen_id == part.id ? 'selected' : ''}>${part.recambio} (${part.marca}) - Stock: ${part.cantidad_comprada}</option>`
     ).join('');
     
-    // For editing existing parts, make select readonly visual indicator
+    // For editing existing parts, store original quantity for diff calculation
     const isExistingPart = isEditing && partData.almacen_id;
+    const originalQty = partData.cantidad || 1;
     
     return `
-        <div class="part-row" data-index="${index}" ${isExistingPart ? 'data-existing="true"' : ''}>
+        <div class="part-row" data-index="${index}" ${isExistingPart ? `data-existing="true" data-original-qty="${originalQty}" data-almacen-id="${partData.almacen_id}"` : ''}>
             <select class="form-select part-select ${isExistingPart ? 'existing-part' : ''}" onchange="updatePartQuantityMax(this)" ${isExistingPart ? 'disabled' : ''}>
                 <option value="">-- Selecciona --</option>
                 ${partsOptions}
             </select>
-            <input type="number" min="1" step="1" class="form-input part-quantity" value="${partData.cantidad || 1}" placeholder="Cant." ${isExistingPart ? 'readonly' : ''}>
+            <input type="number" min="1" step="1" class="form-input part-quantity" value="${partData.cantidad || 1}" placeholder="Cant.">
             ${!isFirst ? `<button type="button" class="btn-remove-part" onclick="removeTallerPartRow(this)">✕</button>` : '<div class="part-spacer"></div>'}
         </div>
     `;
@@ -967,10 +968,10 @@ async function saveTaller(event) {
     const formData = new FormData(form);
     const isEditing = !!editingId;
     
-    // Collect all parts from dynamic rows (only non-existing parts for new additions)
+    // Collect all parts from dynamic rows
     const partRows = document.querySelectorAll('#lista-recambios .part-row');
     const recambios = [];
-    const newRecambios = []; // Only new parts that need stock deduction
+    const stockChanges = []; // Track what needs to be deducted from stock
     let totalCantidad = 0;
     let recambioNames = [];
     
@@ -978,50 +979,67 @@ async function saveTaller(event) {
         const selectEl = row.querySelector('.part-select');
         const quantityEl = row.querySelector('.part-quantity');
         const isExistingPart = row.dataset.existing === 'true';
+        const originalQty = parseInt(row.dataset.originalQty) || 0;
+        const storedAlmacenId = row.dataset.almacenId;
         
         // For existing parts (when editing), get the value from the disabled select
         let almacenId = selectEl.value;
         if (isExistingPart && selectEl.disabled) {
-            // Get value from the selected option even if disabled
-            almacenId = selectEl.options[selectEl.selectedIndex]?.value;
+            almacenId = storedAlmacenId || selectEl.options[selectEl.selectedIndex]?.value;
         }
         
-        const cantidad = parseInt(quantityEl.value) || 1;
+        const newCantidad = parseInt(quantityEl.value) || 1;
         
         if (almacenId) {
             const almacenItem = await getRecord('almacen', parseInt(almacenId));
             
-            // For existing parts when editing, we already have the name stored
+            // Get nombre
             let nombre = '';
             if (almacenItem) {
                 nombre = `${almacenItem.recambio} (${almacenItem.marca})`;
             } else if (isExistingPart) {
-                // Part might have been deleted from almacen, use stored name
                 const selectedOption = selectEl.options[selectEl.selectedIndex];
-                nombre = selectedOption ? selectedOption.textContent.replace(' (ya instalado)', '') : 'Recambio';
+                nombre = selectedOption ? selectedOption.textContent.replace(' (instalado)', '').replace(' (ya instalado)', '') : 'Recambio';
             }
             
-            // Only check stock for NEW parts (not existing ones being edited)
-            if (!isExistingPart && almacenItem) {
-                if (almacenItem.cantidad_comprada < cantidad) {
-                    alert(`Error: No hay suficiente stock de "${almacenItem.recambio}". Disponible: ${almacenItem.cantidad_comprada}, Solicitado: ${cantidad}`);
-                    return;
+            // Calculate stock change needed
+            if (isExistingPart) {
+                // For existing parts: only deduct the DIFFERENCE (newQty - originalQty)
+                const diff = newCantidad - originalQty;
+                if (diff > 0) {
+                    // Need to deduct more from stock
+                    if (almacenItem && almacenItem.cantidad_comprada < diff) {
+                        alert(`Error: No hay suficiente stock de "${nombre}". Disponible: ${almacenItem.cantidad_comprada}, Necesitas añadir: ${diff}`);
+                        return;
+                    }
+                    stockChanges.push({
+                        almacen_id: parseInt(almacenId),
+                        cantidad: diff // Only deduct the difference
+                    });
                 }
-                
-                newRecambios.push({
-                    almacen_id: parseInt(almacenId),
-                    cantidad: cantidad
-                });
+                // If diff <= 0, no need to deduct (user reduced quantity or kept same)
+            } else {
+                // For NEW parts: deduct full quantity
+                if (almacenItem) {
+                    if (almacenItem.cantidad_comprada < newCantidad) {
+                        alert(`Error: No hay suficiente stock de "${almacenItem.recambio}". Disponible: ${almacenItem.cantidad_comprada}, Solicitado: ${newCantidad}`);
+                        return;
+                    }
+                    stockChanges.push({
+                        almacen_id: parseInt(almacenId),
+                        cantidad: newCantidad
+                    });
+                }
             }
             
             recambios.push({
                 almacen_id: parseInt(almacenId),
                 nombre: nombre,
-                cantidad: cantidad
+                cantidad: newCantidad
             });
             
             recambioNames.push(nombre);
-            totalCantidad += cantidad;
+            totalCantidad += newCantidad;
         }
     }
     
@@ -1030,12 +1048,12 @@ async function saveTaller(event) {
         return;
     }
     
-    // Only subtract quantities for NEW parts (not when editing existing)
-    for (const recambio of newRecambios) {
-        const almacenItem = await getRecord('almacen', recambio.almacen_id);
+    // Apply stock changes
+    for (const change of stockChanges) {
+        const almacenItem = await getRecord('almacen', change.almacen_id);
         
         if (almacenItem) {
-            almacenItem.cantidad_comprada -= recambio.cantidad;
+            almacenItem.cantidad_comprada -= change.cantidad;
             
             if (almacenItem.cantidad_comprada <= 0) {
                 almacenItem.cantidad_comprada = 0;
