@@ -134,8 +134,8 @@ function showMergeOptionsModal() {
             <div class="merge-option" data-mode="overwrite" onclick="selectMergeOption('overwrite')">
                 <div class="merge-option-radio"></div>
                 <div class="merge-option-text">
-                    <strong>🔄 Sobrescribir todo</strong>
-                    <span>Reemplaza TODOS los datos locales con el archivo</span>
+                    <strong>🗑️ Reemplazar todo</strong>
+                    <span>Borra TODO y carga solo el archivo importado</span>
                 </div>
             </div>
         </div>

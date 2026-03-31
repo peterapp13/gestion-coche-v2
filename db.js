@@ -247,16 +247,18 @@ async function processDatabaseImport(importedDB, mergeMode) {
     const stats = { added: 0, updated: 0, skipped: 0 };
     
     if (mergeMode === 'overwrite') {
-        // Clear all existing data
+        // Clear ALL existing data completely
         await clearAllData();
         
-        // Insert all imported data
+        // Small delay to ensure IndexedDB is ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Insert all imported data with their ORIGINAL IDs to maintain relationships
         for (const storeName of stores) {
             const records = importedDB.data[storeName] || [];
             for (const record of records) {
-                // Remove ID to let IndexedDB auto-generate
-                const { id, ...recordWithoutId } = record;
-                await addRecord(storeName, recordWithoutId);
+                // Keep the original ID to maintain relationships (almacen_id in taller, etc.)
+                await addRecord(storeName, record);
                 stats.added++;
             }
         }
