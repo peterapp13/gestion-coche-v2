@@ -1184,6 +1184,10 @@ async function loadEstadisticas() {
         const totalFuel = yearRepostajes.reduce((sum, r) => sum + (r.total_euros || 0), 0);
         const totalParts = yearAlmacen.reduce((sum, a) => sum + (a.coste_euros || 0), 0);
         
+        // Calculate total liters and average price per liter
+        const totalLitros = yearRepostajes.reduce((sum, r) => sum + (r.litros || 0), 0);
+        const avgPrecioLitro = totalLitros > 0 ? totalFuel / totalLitros : 0;
+        
         // Fixed costs (Seguro, ITV, Impuesto)
         const fixedCosts = yearOtros
             .filter(o => ['seguro', 'itv', 'impuesto'].includes(o.categoria))
@@ -1200,8 +1204,8 @@ async function loadEstadisticas() {
         renderPieChart(totalFuel, totalParts, fixedCosts, variableCosts);
         renderBarChart(yearRepostajes, yearAlmacen, yearOtros);
         
-        // Render Financial Table
-        renderFinancialTable(totalFuel, totalParts, fixedCosts, variableCosts, grandTotal, yearOtros);
+        // Render Financial Table with fuel stats
+        renderFinancialTable(totalFuel, totalParts, fixedCosts, variableCosts, grandTotal, yearOtros, totalLitros, avgPrecioLitro);
     } catch (error) {
         console.error('Error loading estadisticas:', error);
     }
@@ -1397,7 +1401,7 @@ function renderBarChart(repostajes, almacen, otros) {
     }
 }
 
-function renderFinancialTable(fuel, parts, fixed, variable, total, otrosGastos) {
+function renderFinancialTable(fuel, parts, fixed, variable, total, otrosGastos, totalLitros = 0, avgPrecioLitro = 0) {
     const container = document.getElementById('financial-table-container');
     if (!container) return;
     
@@ -1415,6 +1419,14 @@ function renderFinancialTable(fuel, parts, fixed, variable, total, otrosGastos) 
             <tr>
                 <td><span class="category-icon">⛽</span> Combustible</td>
                 <td>${fuel.toFixed(2)} €</td>
+            </tr>
+            <tr>
+                <td><span class="category-icon">💧</span> Litros Totales</td>
+                <td>${totalLitros.toFixed(1)} L</td>
+            </tr>
+            <tr>
+                <td><span class="category-icon">📊</span> Precio Medio/Litro</td>
+                <td>${avgPrecioLitro.toFixed(3)} €/L</td>
             </tr>
             <tr>
                 <td><span class="category-icon">📦</span> Recambios (Almacén)</td>
