@@ -16,6 +16,20 @@ let filterYearOtros = 'all';
 let pieChartInstance = null;
 let barChartInstance = null;
 
+// Helper function to format date as DD/MM/AAAA
+function formatDate(dateStr) {
+    if (!dateStr) return 'Sin fecha';
+    try {
+        const date = new Date(dateStr);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+    } catch {
+        return dateStr;
+    }
+}
+
 // Expense Categories for "Otros Gastos"
 const EXPENSE_CATEGORIES = [
     { value: 'seguro', label: 'Seguro', icon: '🛡️', type: 'fixed' },
@@ -390,7 +404,7 @@ async function loadRepostajes() {
         <div class="list-item repostaje-item" onclick="editRepostaje(${r.id})">
             <div class="list-item-main">
                 <div class="list-item-title">${r.gasolinera || 'Sin nombre'}</div>
-                <div class="list-item-subtitle">${r.fecha || 'Sin fecha'} · <span class="km-total">${(r.km_actuales || 0).toLocaleString()} km</span></div>
+                <div class="list-item-subtitle">${formatDate(r.fecha)} · <span class="km-total">${(r.km_actuales || 0).toLocaleString()} km</span></div>
             </div>
             <div class="list-item-data">
                 <div class="list-item-amount">${(r.total_euros || 0).toFixed(2)} €</div>
@@ -586,7 +600,7 @@ async function loadAlmacen() {
         <div class="list-item" onclick="editAlmacen(${r.id})">
             <div class="list-item-main">
                 <div class="list-item-title">${r.recambio || 'Sin nombre'}</div>
-                <div class="list-item-subtitle">${r.marca || ''} · ${r.fecha_compra || 'Sin fecha'}</div>
+                <div class="list-item-subtitle">${r.marca || ''} · ${formatDate(r.fecha_compra)}</div>
             </div>
             <div class="list-item-data">
                 <div class="list-item-amount">${(r.coste_euros || 0).toFixed(2)} €</div>
@@ -786,7 +800,7 @@ async function loadTaller() {
         <div class="list-item" onclick="editTaller(${r.id})">
             <div class="list-item-main">
                 <div class="list-item-title">${displayTitle}</div>
-                <div class="list-item-subtitle">${r.fecha_montaje || 'Sin fecha'} · <span class="km-total">${(r.km_montaje || 0).toLocaleString()} km</span></div>
+                <div class="list-item-subtitle">${formatDate(r.fecha_montaje)} · <span class="km-total">${(r.km_montaje || 0).toLocaleString()} km</span></div>
                 ${partsCount > 1 ? `<div class="list-item-parts">${partsCount} recambios</div>` : ''}
             </div>
             <div class="list-item-data">
@@ -1266,7 +1280,7 @@ async function loadOtrosGastos() {
         <div class="list-item" onclick="editOtrosGastos(${r.id})">
             <div class="list-item-main">
                 <div class="list-item-title">${category.icon} ${r.descripcion || 'Sin descripción'}</div>
-                <div class="list-item-subtitle">${r.fecha || 'Sin fecha'} · ${category.label}</div>
+                <div class="list-item-subtitle">${formatDate(r.fecha)} · ${category.label}</div>
             </div>
             <div class="list-item-data">
                 <div class="list-item-amount expense">${(r.importe || 0).toFixed(2)} €</div>
