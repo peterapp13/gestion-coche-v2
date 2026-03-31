@@ -400,31 +400,65 @@ async function loadRepostajes() {
     // PASO 2: Ordenar cronológicamente por km (de menor a mayor para calcular consumo)
     allVehicleRecords.sort((a, b) => (a.km_actuales || 0) - (b.km_actuales || 0));
     
-    // PASO 3: Calcular distancia y consumo ANTES de filtrar por año
+    // PASO 3: Calcular consumo FULL-TO-FULL (acumulando litros entre tanques llenos)
+    let litrosAcumulados = 0;
+    let ultimoKmTanqueLleno = null;
+    
     for (let i = 0; i < allVehicleRecords.length; i++) {
-        if (i === 0) {
-            // Primer repostaje: no hay referencia anterior
-            allVehicleRecords[i].km_gastados = 0;
-            allVehicleRecords[i].consumo = '--';
+        const registro = allVehicleRecords[i];
+        const kmActual = parseFloat(registro.km_actuales) || 0;
+        const litros = parseFloat(registro.litros) || 0;
+        
+        // Acumular litros
+        litrosAcumulados += litros;
+        
+        // Determinar si es tanque lleno (nuevo campo o inferir de autonomía para datos antiguos)
+        let esTanqueLleno = false;
+        if (registro.tanque_lleno !== undefined) {
+            // Nuevo campo existe
+            esTanqueLleno = registro.tanque_lleno === true || registro.tanque_lleno === 'true';
         } else {
-            const current = allVehicleRecords[i];
-            const previous = allVehicleRecords[i - 1];
-            const distancia = (current.km_actuales || 0) - (previous.km_actuales || 0);
-            allVehicleRecords[i].km_gastados = distancia;
-            
-            if (distancia > 0 && current.litros) {
-                const consumoCalculado = (current.litros / distancia) * 100;
-                // Validar que el consumo sea realista (entre 2 y 25 L/100km)
-                if (consumoCalculado >= 2 && consumoCalculado <= 25) {
+            // Datos antiguos: inferir de autonomía después (>634 km = tanque lleno)
+            const autonomiaDespues = parseFloat(registro.autonomia_despues) || 0;
+            esTanqueLleno = autonomiaDespues > 634;
+        }
+        
+        // Guardar si es tanque lleno para mostrar en UI
+        allVehicleRecords[i].esTanqueLleno = esTanqueLleno;
+        
+        if (esTanqueLleno) {
+            // TANQUE LLENO: Calcular consumo desde el último tanque lleno
+            if (ultimoKmTanqueLleno !== null) {
+                const distancia = kmActual - ultimoKmTanqueLleno;
+                allVehicleRecords[i].km_gastados = distancia;
+                
+                if (distancia > 0 && litrosAcumulados > 0) {
+                    const consumoCalculado = (litrosAcumulados / distancia) * 100;
                     allVehicleRecords[i].consumo = consumoCalculado.toFixed(2);
+                    // Marcar si es irreal
+                    allVehicleRecords[i].consumoIrreal = consumoCalculado < 2 || consumoCalculado > 25;
                 } else {
-                    // Consumo fuera de rango realista - marcar como dato inconsistente
-                    allVehicleRecords[i].consumo = consumoCalculado.toFixed(2);
-                    allVehicleRecords[i].consumoIrreal = true;
+                    allVehicleRecords[i].consumo = '--';
                 }
             } else {
+                // Primer tanque lleno: no hay referencia anterior
+                allVehicleRecords[i].km_gastados = 0;
                 allVehicleRecords[i].consumo = '--';
             }
+            
+            // Resetear acumuladores
+            litrosAcumulados = 0;
+            ultimoKmTanqueLleno = kmActual;
+        } else {
+            // REPOSTAJE PARCIAL: No calcular consumo, seguir acumulando
+            if (i > 0) {
+                const previous = allVehicleRecords[i - 1];
+                const distancia = kmActual - (parseFloat(previous.km_actuales) || 0);
+                allVehicleRecords[i].km_gastados = distancia;
+            } else {
+                allVehicleRecords[i].km_gastados = 0;
+            }
+            allVehicleRecords[i].consumo = 'Parcial';
         }
     }
     
@@ -472,7 +506,11 @@ async function loadRepostajes() {
             // Format consumption display
             let consumoDisplay = '--';
             let consumoClass = 'list-item-consumo';
-            if (r.consumo !== '--') {
+            
+            if (r.consumo === 'Parcial') {
+                consumoDisplay = 'Parcial';
+                consumoClass += ' consumo-parcial';
+            } else if (r.consumo !== '--') {
                 consumoDisplay = `${r.consumo} L/100km`;
                 // Mark unrealistic values with different color
                 if (r.consumoIrreal) {
@@ -483,10 +521,13 @@ async function loadRepostajes() {
             // Show km traveled since last fill-up
             const kmRecorridos = r.km_gastados > 0 ? `+${r.km_gastados} km` : '';
             
+            // Indicator for full tank or partial
+            const tanqueIcon = r.esTanqueLleno ? '⛽' : '½';
+            
             return `
         <div class="list-item repostaje-item" onclick="editRepostaje(${r.id})">
             <div class="list-item-main">
-                <div class="list-item-title">${r.gasolinera || 'Sin nombre'}</div>
+                <div class="list-item-title"><span class="tanque-icon">${tanqueIcon}</span> ${r.gasolinera || 'Sin nombre'}</div>
                 <div class="list-item-subtitle">${formatDate(r.fecha)} · <span class="km-total">${(r.km_actuales || 0).toLocaleString()} km</span> ${kmRecorridos ? `<span class="km-recorridos">(${kmRecorridos})</span>` : ''}</div>
             </div>
             <div class="list-item-data">
@@ -550,6 +591,16 @@ function openRepostajeModal(title, data = {}) {
                 <label class="form-label">Autonomía Después (km)</label>
                 <input type="number" class="form-input" name="autonomia_despues" value="${data.autonomia_despues || ''}" required>
             </div>
+            
+            <div class="form-group checkbox-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="tanque_lleno" id="tanque_lleno" ${data.tanque_lleno !== false ? 'checked' : ''}>
+                    <span class="checkbox-custom"></span>
+                    <span class="checkbox-text">¿Tanque Lleno?</span>
+                </label>
+                <span class="checkbox-hint">Marca si llenaste el depósito completo</span>
+            </div>
+            
             <div class="form-group">
                 <label class="form-label">Litros</label>
                 <input type="number" step="0.01" class="form-input" name="litros" id="litros" value="${data.litros || ''}" oninput="calcularTotalRepostaje()" required>
@@ -637,6 +688,7 @@ async function saveRepostaje(event) {
     
     const descuentoTipo = document.getElementById('descuento_tipo')?.value || 'euros';
     const descuentoValor = parseFloat(document.getElementById('descuento_valor')?.value) || 0;
+    const tanqueLleno = document.getElementById('tanque_lleno')?.checked ?? true;
     
     const data = {
         matricula: activeVehicle, // BIND TO ACTIVE VEHICLE
@@ -646,6 +698,7 @@ async function saveRepostaje(event) {
         km_actuales: parseFloat(formData.get('km_actuales')),
         autonomia_antes: parseFloat(formData.get('autonomia_antes')),
         autonomia_despues: parseFloat(formData.get('autonomia_despues')),
+        tanque_lleno: tanqueLleno,
         litros: parseFloat(formData.get('litros')),
         precio_litro: parseFloat(formData.get('precio_litro')),
         importe_bruto: parseFloat(formData.get('importe_bruto')) || 0,
