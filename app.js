@@ -30,6 +30,50 @@ function formatDate(dateStr) {
     }
 }
 
+// Migration function: Normalize discount fields in old records
+async function migrarDescuentosAntiguos() {
+    try {
+        const repostajes = await getAllRecords('repostajes');
+        let migratedCount = 0;
+        
+        for (const record of repostajes) {
+            let needsUpdate = false;
+            
+            // Normalize descuento_valor (was descuento_porcentaje or descuento_euros)
+            if (record.descuento_valor === undefined || record.descuento_valor === null) {
+                record.descuento_valor = 0;
+                needsUpdate = true;
+            }
+            
+            // Normalize descuento_tipo
+            if (record.descuento_tipo === undefined || record.descuento_tipo === null) {
+                record.descuento_tipo = 'euros';
+                needsUpdate = true;
+            }
+            
+            // Normalize importe_bruto (calculate if missing)
+            if (record.importe_bruto === undefined || record.importe_bruto === null) {
+                const litros = parseFloat(record.litros) || 0;
+                const precioLitro = parseFloat(record.precio_litro) || 0;
+                record.importe_bruto = litros * precioLitro;
+                needsUpdate = true;
+            }
+            
+            // Update record if needed
+            if (needsUpdate) {
+                await updateRecord('repostajes', record);
+                migratedCount++;
+            }
+        }
+        
+        if (migratedCount > 0) {
+            console.log(`Migración completada: ${migratedCount} repostajes actualizados`);
+        }
+    } catch (error) {
+        console.error('Error en migración de descuentos:', error);
+    }
+}
+
 // Expense Categories for "Otros Gastos"
 const EXPENSE_CATEGORIES = [
     { value: 'seguro', label: 'Seguro', icon: '🛡️', type: 'fixed' },
@@ -54,6 +98,9 @@ function getYearFilterOptions(selectedValue = 'all') {
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         await initDB();
+        
+        // Run migration for old records (normalize discount fields)
+        await migrarDescuentosAntiguos();
         
         // Load active vehicle from localStorage
         const savedVehicle = localStorage.getItem('activeVehicle');
