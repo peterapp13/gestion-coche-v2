@@ -944,7 +944,55 @@ function addTallerPartRow() {
 
 function removeTallerPartRow(button) {
     const row = button.closest('.part-row');
+    const wasExisting = row.dataset.existing === 'true';
+    const almacenId = row.dataset.almacenId;
+    const originalQty = parseInt(row.dataset.originalQty) || 0;
+    
     row.remove();
+    
+    // If removing an existing part, update dropdowns to show the returned stock
+    if (wasExisting && almacenId && originalQty > 0) {
+        updateTallerDropdownsStock(parseInt(almacenId), originalQty);
+    }
+}
+
+// Update all dropdowns to reflect stock that will be returned
+function updateTallerDropdownsStock(returnedAlmacenId, returnedQty) {
+    const allSelects = document.querySelectorAll('#lista-recambios .part-select:not(:disabled)');
+    
+    allSelects.forEach(select => {
+        // Find the option for this almacen_id and update its stock display
+        for (let i = 0; i < select.options.length; i++) {
+            const option = select.options[i];
+            if (option.value == returnedAlmacenId) {
+                const currentMax = parseInt(option.getAttribute('data-max')) || 0;
+                const newMax = currentMax + returnedQty;
+                option.setAttribute('data-max', newMax);
+                
+                // Update the text to show new stock
+                const text = option.textContent;
+                const newText = text.replace(/Stock: \d+/, `Stock: ${newMax}`);
+                option.textContent = newText;
+            }
+        }
+    });
+    
+    // Also update the global available parts for new rows
+    if (window.tallerAvailableParts) {
+        const part = window.tallerAvailableParts.find(p => p.id == returnedAlmacenId);
+        if (part) {
+            part.cantidad_comprada += returnedQty;
+        } else {
+            // Part might have been out of stock, need to add it back
+            const allParts = window.tallerAllParts || [];
+            const fullPart = allParts.find(p => p.id == returnedAlmacenId);
+            if (fullPart) {
+                fullPart.cantidad_comprada += returnedQty;
+                fullPart.estado = 'En Stock';
+                window.tallerAvailableParts.push(fullPart);
+            }
+        }
+    }
 }
 
 function updatePartQuantityMax(selectElement) {
