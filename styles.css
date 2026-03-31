@@ -1569,3 +1569,32 @@ body {
     margin: 0;
     white-space: pre-wrap;
 }
+
+/* Discount section in repostajes */
+.discount-section {
+    background: #1A1A1A;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 16px 0;
+}
+
+.discount-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.discount-row .discount-type {
+    flex: 0 0 70px;
+    width: 70px;
+}
+
+.discount-row .discount-value {
+    flex: 1;
+}
+
+/* Total pagado highlight */
+.total-pagado {
+    font-weight: 600;
+    color: #10B981 !important;
+}

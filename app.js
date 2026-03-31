@@ -469,15 +469,32 @@ function openRepostajeModal(title, data = {}) {
             </div>
             <div class="form-group">
                 <label class="form-label">Litros</label>
-                <input type="number" step="0.01" class="form-input" name="litros" value="${data.litros || ''}" required>
+                <input type="number" step="0.01" class="form-input" name="litros" id="litros" value="${data.litros || ''}" oninput="calcularTotalRepostaje()" required>
             </div>
             <div class="form-group">
                 <label class="form-label">Precio por Litro (€)</label>
-                <input type="number" step="0.001" class="form-input" name="precio_litro" value="${data.precio_litro || ''}" required>
+                <input type="number" step="0.001" class="form-input" name="precio_litro" id="precio_litro" value="${data.precio_litro || ''}" oninput="calcularTotalRepostaje()" required>
             </div>
+            
+            <div class="form-section discount-section">
+                <label class="form-label">Descuento (opcional)</label>
+                <div class="discount-row">
+                    <select class="form-select discount-type" id="descuento_tipo" onchange="calcularTotalRepostaje()">
+                        <option value="euros" ${(data.descuento_tipo === 'euros' || !data.descuento_tipo) ? 'selected' : ''}>€</option>
+                        <option value="porcentaje" ${data.descuento_tipo === 'porcentaje' ? 'selected' : ''}>%</option>
+                    </select>
+                    <input type="number" step="0.01" class="form-input discount-value" id="descuento_valor" name="descuento_valor" value="${data.descuento_valor || ''}" placeholder="0.00" oninput="calcularTotalRepostaje()">
+                </div>
+            </div>
+            
             <div class="form-group">
-                <label class="form-label">Total (€)</label>
-                <input type="number" step="0.01" class="form-input" name="total_euros" value="${data.total_euros || ''}" required>
+                <label class="form-label">Importe Bruto (€)</label>
+                <input type="number" step="0.01" class="form-input" id="importe_bruto" name="importe_bruto" value="${data.importe_bruto || ''}" readonly style="background: #2A2A2A; opacity: 0.7;">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Total Pagado (€)</label>
+                <input type="number" step="0.01" class="form-input total-pagado" name="total_euros" id="total_euros" value="${data.total_euros || ''}" required>
             </div>
             <div class="form-actions">
                 <button type="button" class="btn-secondary" onclick="closeModal()">Cancelar</button>
@@ -487,6 +504,41 @@ function openRepostajeModal(title, data = {}) {
     `;
     
     modal.classList.add('show');
+    
+    // Calculate initial total if editing
+    if (data.litros && data.precio_litro) {
+        calcularTotalRepostaje();
+    }
+}
+
+// Calculate fuel total with discount
+function calcularTotalRepostaje() {
+    const litros = parseFloat(document.getElementById('litros')?.value) || 0;
+    const precioLitro = parseFloat(document.getElementById('precio_litro')?.value) || 0;
+    const descuentoTipo = document.getElementById('descuento_tipo')?.value || 'euros';
+    const descuentoValor = parseFloat(document.getElementById('descuento_valor')?.value) || 0;
+    
+    const importeBruto = litros * precioLitro;
+    let descuentoEuros = 0;
+    
+    if (descuentoTipo === 'porcentaje') {
+        descuentoEuros = importeBruto * (descuentoValor / 100);
+    } else {
+        descuentoEuros = descuentoValor;
+    }
+    
+    const totalPagado = importeBruto - descuentoEuros;
+    
+    // Update fields
+    const importeBrutoInput = document.getElementById('importe_bruto');
+    const totalEurosInput = document.getElementById('total_euros');
+    
+    if (importeBrutoInput) {
+        importeBrutoInput.value = importeBruto.toFixed(2);
+    }
+    if (totalEurosInput) {
+        totalEurosInput.value = totalPagado.toFixed(2);
+    }
 }
 
 async function saveRepostaje(event) {
@@ -500,6 +552,9 @@ async function saveRepostaje(event) {
     const form = event.target;
     const formData = new FormData(form);
     
+    const descuentoTipo = document.getElementById('descuento_tipo')?.value || 'euros';
+    const descuentoValor = parseFloat(document.getElementById('descuento_valor')?.value) || 0;
+    
     const data = {
         matricula: activeVehicle, // BIND TO ACTIVE VEHICLE
         numero_factura: formData.get('numero_factura'),
@@ -510,6 +565,9 @@ async function saveRepostaje(event) {
         autonomia_despues: parseFloat(formData.get('autonomia_despues')),
         litros: parseFloat(formData.get('litros')),
         precio_litro: parseFloat(formData.get('precio_litro')),
+        importe_bruto: parseFloat(formData.get('importe_bruto')) || 0,
+        descuento_tipo: descuentoTipo,
+        descuento_valor: descuentoValor,
         total_euros: parseFloat(formData.get('total_euros'))
     };
     
