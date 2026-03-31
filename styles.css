@@ -1411,3 +1411,24 @@ body {
 .records-list {
     padding: 0 16px 16px;
 }
+
+/* ===== REPOSTAJES VISUAL HIGHLIGHTS ===== */
+
+/* Kilometers total - Blue color */
+.km-total {
+    color: #007AFF;
+    font-weight: 600;
+}
+
+/* Consumption L/100km - Green color */
+.list-item-consumo {
+    font-size: 11px;
+    font-weight: 600;
+    color: #28a745;
+    margin-top: 2px;
+}
+
+/* Repostaje item with more data space */
+.repostaje-item .list-item-data {
+    min-width: 100px;
+}

@@ -383,19 +383,23 @@ async function loadRepostajes() {
     
     const listHtml = vehicleRecords.length === 0 
         ? `<div class="empty-state small"><div class="empty-state-text">No hay datos en ${filterYearRepostajes}</div></div>`
-        : vehicleRecords.map(r => `
-        <div class="list-item" onclick="editRepostaje(${r.id})">
+        : vehicleRecords.map(r => {
+            // Calculate price per liter for display
+            const precioLitro = (r.litros && r.litros > 0) ? (r.total_euros / r.litros).toFixed(3) : (r.precio_litro || 0).toFixed(3);
+            return `
+        <div class="list-item repostaje-item" onclick="editRepostaje(${r.id})">
             <div class="list-item-main">
                 <div class="list-item-title">${r.gasolinera || 'Sin nombre'}</div>
-                <div class="list-item-subtitle">${r.fecha || 'Sin fecha'} · ${(r.km_actuales || 0).toLocaleString()} km</div>
+                <div class="list-item-subtitle">${r.fecha || 'Sin fecha'} · <span class="km-total">${(r.km_actuales || 0).toLocaleString()} km</span></div>
             </div>
             <div class="list-item-data">
                 <div class="list-item-amount">${(r.total_euros || 0).toFixed(2)} €</div>
-                <div class="list-item-detail">${(r.litros || 0).toFixed(1)} L ${r.consumo ? `· ${r.consumo} L/100` : ''}</div>
+                <div class="list-item-detail">${(r.litros || 0).toFixed(2)} L · ${precioLitro} €/L</div>
+                ${r.consumo ? `<div class="list-item-consumo">${r.consumo} L/100km</div>` : ''}
             </div>
             <button class="list-item-delete" onclick="event.stopPropagation(); deleteRepostaje(${r.id})">🗑️</button>
         </div>
-    `).join('');
+    `}).join('');
     
     container.innerHTML = filterHtml + `<div class="list-container">${listHtml}</div>`;
 }
