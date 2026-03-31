@@ -413,7 +413,15 @@ async function loadRepostajes() {
             allVehicleRecords[i].km_gastados = distancia;
             
             if (distancia > 0 && current.litros) {
-                allVehicleRecords[i].consumo = ((current.litros / distancia) * 100).toFixed(2);
+                const consumoCalculado = (current.litros / distancia) * 100;
+                // Validar que el consumo sea realista (entre 2 y 25 L/100km)
+                if (consumoCalculado >= 2 && consumoCalculado <= 25) {
+                    allVehicleRecords[i].consumo = consumoCalculado.toFixed(2);
+                } else {
+                    // Consumo fuera de rango realista - marcar como dato inconsistente
+                    allVehicleRecords[i].consumo = consumoCalculado.toFixed(2);
+                    allVehicleRecords[i].consumoIrreal = true;
+                }
             } else {
                 allVehicleRecords[i].consumo = '--';
             }
@@ -460,17 +468,31 @@ async function loadRepostajes() {
         : filteredRecords.map(r => {
             // Calculate price per liter for display
             const precioLitro = (r.litros && r.litros > 0) ? (r.total_euros / r.litros).toFixed(3) : (r.precio_litro || 0).toFixed(3);
-            const consumoDisplay = r.consumo === '--' ? '--' : `${r.consumo} L/100km`;
+            
+            // Format consumption display
+            let consumoDisplay = '--';
+            let consumoClass = 'list-item-consumo';
+            if (r.consumo !== '--') {
+                consumoDisplay = `${r.consumo} L/100km`;
+                // Mark unrealistic values with different color
+                if (r.consumoIrreal) {
+                    consumoClass += ' consumo-irreal';
+                }
+            }
+            
+            // Show km traveled since last fill-up
+            const kmRecorridos = r.km_gastados > 0 ? `+${r.km_gastados} km` : '';
+            
             return `
         <div class="list-item repostaje-item" onclick="editRepostaje(${r.id})">
             <div class="list-item-main">
                 <div class="list-item-title">${r.gasolinera || 'Sin nombre'}</div>
-                <div class="list-item-subtitle">${formatDate(r.fecha)} · <span class="km-total">${(r.km_actuales || 0).toLocaleString()} km</span></div>
+                <div class="list-item-subtitle">${formatDate(r.fecha)} · <span class="km-total">${(r.km_actuales || 0).toLocaleString()} km</span> ${kmRecorridos ? `<span class="km-recorridos">(${kmRecorridos})</span>` : ''}</div>
             </div>
             <div class="list-item-data">
                 <div class="list-item-amount">${(r.total_euros || 0).toFixed(2)} €</div>
                 <div class="list-item-detail">${(r.litros || 0).toFixed(2)} L · ${precioLitro} €/L</div>
-                <div class="list-item-consumo">${consumoDisplay}</div>
+                <div class="${consumoClass}">${consumoDisplay}</div>
             </div>
             <button class="list-item-delete" onclick="event.stopPropagation(); deleteRepostaje(${r.id})">🗑️</button>
         </div>
