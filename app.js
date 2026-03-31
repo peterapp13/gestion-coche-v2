@@ -821,8 +821,12 @@ async function showTallerForm(id = null) {
     
     if (id) {
         const record = await getRecord('taller', id);
+        // Store original recambios for comparison when saving (to detect deletions)
+        window.tallerOriginalRecambios = record.recambios ? [...record.recambios] : 
+            (record.almacen_id ? [{ almacen_id: record.almacen_id, cantidad: record.cantidad_usada || 1 }] : []);
         openTallerModal(title, record, availableParts, allVehicleParts);
     } else {
+        window.tallerOriginalRecambios = [];
         openTallerModal(title, {}, availableParts, allVehicleParts);
     }
 }
@@ -870,7 +874,7 @@ function openTallerModal(title, data = {}, availableParts = [], allParts = []) {
             
             <div class="form-section">
                 <label class="form-label">Recambios Instalados</label>
-                ${isEditing ? '<p style="color: #9CA3AF; font-size: 12px; margin-bottom: 12px;">💡 Puedes modificar cantidades. Solo se descontará la diferencia del almacén.</p>' : ''}
+                ${isEditing ? '<p style="color: #9CA3AF; font-size: 12px; margin-bottom: 12px;">💡 Modifica cantidades o elimina recambios. El stock se ajusta automáticamente.</p>' : ''}
                 <div id="lista-recambios">
                     ${partsRowsHtml}
                 </div>
@@ -1048,7 +1052,23 @@ async function saveTaller(event) {
         return;
     }
     
-    // Apply stock changes
+    // Check for DELETED parts (were in original but not in current) - return their stock
+    const originalRecambios = window.tallerOriginalRecambios || [];
+    const currentAlmacenIds = recambios.map(r => r.almacen_id);
+    
+    for (const original of originalRecambios) {
+        if (!currentAlmacenIds.includes(original.almacen_id)) {
+            // This part was deleted - return stock to almacén
+            const almacenItem = await getRecord('almacen', original.almacen_id);
+            if (almacenItem) {
+                almacenItem.cantidad_comprada += original.cantidad;
+                almacenItem.estado = 'En Stock';
+                await updateRecord('almacen', almacenItem);
+            }
+        }
+    }
+    
+    // Apply stock changes (deductions for new parts or increased quantities)
     for (const change of stockChanges) {
         const almacenItem = await getRecord('almacen', change.almacen_id);
         
