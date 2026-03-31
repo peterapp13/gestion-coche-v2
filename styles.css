@@ -1530,3 +1530,14 @@ body {
     margin-top: 4px;
     display: inline-block;
 }
+
+/* Existing part in edit mode (readonly) */
+.part-select.existing-part {
+    opacity: 0.7;
+    background: #2A2A2A;
+}
+
+.part-row[data-existing="true"] .part-quantity {
+    opacity: 0.7;
+    background: #2A2A2A;
+}

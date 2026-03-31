@@ -805,29 +805,34 @@ async function showTallerForm(id = null) {
     editingId = id;
     const title = id ? 'Editar Trabajo' : 'Nuevo Trabajo';
     
-    // Get available parts from Almacén FILTERED BY ACTIVE VEHICLE with stock > 0
+    // Get ALL parts from Almacén FILTERED BY ACTIVE VEHICLE
     const almacenItems = await getAllRecords('almacen');
-    const availableParts = almacenItems.filter(item => 
-        item.matricula === activeVehicle && 
+    const allVehicleParts = almacenItems.filter(item => item.matricula === activeVehicle);
+    
+    // Parts with stock available (for new selections)
+    const availableParts = allVehicleParts.filter(item => 
         item.cantidad_comprada > 0 && 
         item.estado === 'En Stock'
     );
     
-    // Store available parts globally for adding new rows
+    // Store for adding new rows
     window.tallerAvailableParts = availableParts;
+    window.tallerAllParts = allVehicleParts; // All parts for showing existing selections
     
     if (id) {
-        getRecord('taller', id).then(record => {
-            openTallerModal(title, record, availableParts);
-        });
+        const record = await getRecord('taller', id);
+        openTallerModal(title, record, availableParts, allVehicleParts);
     } else {
-        openTallerModal(title, {}, availableParts);
+        openTallerModal(title, {}, availableParts, allVehicleParts);
     }
 }
 
-function openTallerModal(title, data = {}, availableParts = []) {
+function openTallerModal(title, data = {}, availableParts = [], allParts = []) {
     const modal = document.getElementById('modal');
     const modalBody = document.getElementById('modal-body');
+    
+    // Check if we're editing (has existing recambios)
+    const isEditing = data.id && (data.recambios || data.almacen_id);
     
     // Prepare initial parts data for editing
     let initialParts = [];
@@ -836,13 +841,20 @@ function openTallerModal(title, data = {}, availableParts = []) {
         initialParts = data.recambios;
     } else if (data.almacen_id) {
         // Old format: single part - convert to array format for editing
-        initialParts = [{ almacen_id: data.almacen_id, cantidad: data.cantidad_usada || 1 }];
+        initialParts = [{ almacen_id: data.almacen_id, cantidad: data.cantidad_usada || 1, nombre: data.recambio_instalado }];
     }
     
     // Generate initial parts rows HTML
+    // For editing: use allParts to show existing selections even without stock
+    // For new: use availableParts
+    const partsForDropdown = isEditing ? allParts : availableParts;
+    
     const partsRowsHtml = initialParts.length > 0 
-        ? initialParts.map((part, index) => createPartRowHtml(index, availableParts, part, index === 0)).join('')
-        : createPartRowHtml(0, availableParts, {}, true);
+        ? initialParts.map((part, index) => createPartRowHtml(index, partsForDropdown, part, index === 0, isEditing)).join('')
+        : createPartRowHtml(0, availableParts, {}, true, false);
+    
+    // Show add button if there are available parts with stock
+    const showAddButton = availableParts.length > 0;
     
     modalBody.innerHTML = `
         <h2 class="form-title">${title}</h2>
@@ -858,14 +870,15 @@ function openTallerModal(title, data = {}, availableParts = []) {
             
             <div class="form-section">
                 <label class="form-label">Recambios Instalados</label>
+                ${isEditing ? '<p style="color: #9CA3AF; font-size: 12px; margin-bottom: 12px;">⚠️ Al editar no se modifica el stock del almacén</p>' : ''}
                 <div id="lista-recambios">
                     ${partsRowsHtml}
                 </div>
-                ${availableParts.length > 0 ? `
+                ${showAddButton ? `
                 <button type="button" class="btn-add-part" onclick="addTallerPartRow()">
                     + Añadir otro recambio
                 </button>
-                ` : '<p style="color: #F59E0B; font-size: 14px; margin-top: 8px;">No hay piezas disponibles en stock</p>'}
+                ` : (!isEditing ? '<p style="color: #F59E0B; font-size: 14px; margin-top: 8px;">No hay piezas disponibles en stock</p>' : '')}
             </div>
             
             <div class="form-group">
@@ -882,18 +895,35 @@ function openTallerModal(title, data = {}, availableParts = []) {
     modal.classList.add('show');
 }
 
-function createPartRowHtml(index, availableParts, partData = {}, isFirst = false) {
-    const partsOptions = availableParts.map(part => 
+function createPartRowHtml(index, availableParts, partData = {}, isFirst = false, isEditing = false) {
+    // For editing: show the selected part even if it has no stock
+    let partsOptions = '';
+    
+    if (isEditing && partData.almacen_id) {
+        // Check if the part is already in availableParts
+        const partExists = availableParts.some(p => p.id == partData.almacen_id);
+        
+        if (!partExists && partData.nombre) {
+            // Part not in stock, show it as a disabled option that's selected
+            partsOptions = `<option value="${partData.almacen_id}" selected disabled>${partData.nombre} (ya instalado)</option>`;
+        }
+    }
+    
+    // Add available parts
+    partsOptions += availableParts.map(part => 
         `<option value="${part.id}" data-max="${part.cantidad_comprada}" ${partData.almacen_id == part.id ? 'selected' : ''}>${part.recambio} (${part.marca}) - Stock: ${part.cantidad_comprada}</option>`
     ).join('');
     
+    // For editing existing parts, make select readonly visual indicator
+    const isExistingPart = isEditing && partData.almacen_id;
+    
     return `
-        <div class="part-row" data-index="${index}">
-            <select class="form-select part-select" onchange="updatePartQuantityMax(this)">
+        <div class="part-row" data-index="${index}" ${isExistingPart ? 'data-existing="true"' : ''}>
+            <select class="form-select part-select ${isExistingPart ? 'existing-part' : ''}" onchange="updatePartQuantityMax(this)" ${isExistingPart ? 'disabled' : ''}>
                 <option value="">-- Selecciona --</option>
                 ${partsOptions}
             </select>
-            <input type="number" min="1" step="1" class="form-input part-quantity" value="${partData.cantidad || 1}" placeholder="Cant.">
+            <input type="number" min="1" step="1" class="form-input part-quantity" value="${partData.cantidad || 1}" placeholder="Cant." ${isExistingPart ? 'readonly' : ''}>
             ${!isFirst ? `<button type="button" class="btn-remove-part" onclick="removeTallerPartRow(this)">✕</button>` : '<div class="part-spacer"></div>'}
         </div>
     `;
@@ -935,40 +965,62 @@ async function saveTaller(event) {
     
     const form = event.target;
     const formData = new FormData(form);
+    const isEditing = !!editingId;
     
-    // Collect all parts from dynamic rows
+    // Collect all parts from dynamic rows (only non-existing parts for new additions)
     const partRows = document.querySelectorAll('#lista-recambios .part-row');
     const recambios = [];
+    const newRecambios = []; // Only new parts that need stock deduction
     let totalCantidad = 0;
     let recambioNames = [];
     
     for (const row of partRows) {
         const selectEl = row.querySelector('.part-select');
         const quantityEl = row.querySelector('.part-quantity');
+        const isExistingPart = row.dataset.existing === 'true';
         
-        const almacenId = selectEl.value;
+        // For existing parts (when editing), get the value from the disabled select
+        let almacenId = selectEl.value;
+        if (isExistingPart && selectEl.disabled) {
+            // Get value from the selected option even if disabled
+            almacenId = selectEl.options[selectEl.selectedIndex]?.value;
+        }
+        
         const cantidad = parseInt(quantityEl.value) || 1;
         
         if (almacenId) {
             const almacenItem = await getRecord('almacen', parseInt(almacenId));
             
-            if (!almacenItem) {
-                alert('Error: No se encontró uno de los recambios seleccionados');
-                return;
+            // For existing parts when editing, we already have the name stored
+            let nombre = '';
+            if (almacenItem) {
+                nombre = `${almacenItem.recambio} (${almacenItem.marca})`;
+            } else if (isExistingPart) {
+                // Part might have been deleted from almacen, use stored name
+                const selectedOption = selectEl.options[selectEl.selectedIndex];
+                nombre = selectedOption ? selectedOption.textContent.replace(' (ya instalado)', '') : 'Recambio';
             }
             
-            if (almacenItem.cantidad_comprada < cantidad) {
-                alert(`Error: No hay suficiente stock de "${almacenItem.recambio}". Disponible: ${almacenItem.cantidad_comprada}, Solicitado: ${cantidad}`);
-                return;
+            // Only check stock for NEW parts (not existing ones being edited)
+            if (!isExistingPart && almacenItem) {
+                if (almacenItem.cantidad_comprada < cantidad) {
+                    alert(`Error: No hay suficiente stock de "${almacenItem.recambio}". Disponible: ${almacenItem.cantidad_comprada}, Solicitado: ${cantidad}`);
+                    return;
+                }
+                
+                newRecambios.push({
+                    almacen_id: parseInt(almacenId),
+                    cantidad: cantidad
+                });
             }
             
             recambios.push({
                 almacen_id: parseInt(almacenId),
-                nombre: `${almacenItem.recambio} (${almacenItem.marca})`,
+                nombre: nombre,
                 cantidad: cantidad
             });
             
-            recambioNames.push(`${almacenItem.recambio} (${almacenItem.marca})`);
+            recambioNames.push(nombre);
             totalCantidad += cantidad;
         }
     }
@@ -978,18 +1030,20 @@ async function saveTaller(event) {
         return;
     }
     
-    // Now subtract quantities from almacén for each part
-    for (const recambio of recambios) {
+    // Only subtract quantities for NEW parts (not when editing existing)
+    for (const recambio of newRecambios) {
         const almacenItem = await getRecord('almacen', recambio.almacen_id);
         
-        almacenItem.cantidad_comprada -= recambio.cantidad;
-        
-        if (almacenItem.cantidad_comprada <= 0) {
-            almacenItem.cantidad_comprada = 0;
-            almacenItem.estado = 'Agotado/Instalado';
+        if (almacenItem) {
+            almacenItem.cantidad_comprada -= recambio.cantidad;
+            
+            if (almacenItem.cantidad_comprada <= 0) {
+                almacenItem.cantidad_comprada = 0;
+                almacenItem.estado = 'Agotado/Instalado';
+            }
+            
+            await updateRecord('almacen', almacenItem);
         }
-        
-        await updateRecord('almacen', almacenItem);
     }
     
     const data = {
