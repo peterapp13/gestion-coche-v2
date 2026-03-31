@@ -346,32 +346,45 @@ async function loadRepostajes() {
     }
     
     const records = await getAllRecords('repostajes');
-    // Filter by active vehicle
-    let vehicleRecords = records.filter(r => !r.matricula || r.matricula === activeVehicle);
     
-    // Apply year filter
+    // PASO 1: Filtrar por vehículo activo (sin filtrar por año todavía)
+    let allVehicleRecords = records.filter(r => !r.matricula || r.matricula === activeVehicle);
+    
+    // PASO 2: Ordenar cronológicamente por km (de menor a mayor para calcular consumo)
+    allVehicleRecords.sort((a, b) => (a.km_actuales || 0) - (b.km_actuales || 0));
+    
+    // PASO 3: Calcular distancia y consumo ANTES de filtrar por año
+    for (let i = 0; i < allVehicleRecords.length; i++) {
+        if (i === 0) {
+            // Primer repostaje: no hay referencia anterior
+            allVehicleRecords[i].km_gastados = 0;
+            allVehicleRecords[i].consumo = '--';
+        } else {
+            const current = allVehicleRecords[i];
+            const previous = allVehicleRecords[i - 1];
+            const distancia = (current.km_actuales || 0) - (previous.km_actuales || 0);
+            allVehicleRecords[i].km_gastados = distancia;
+            
+            if (distancia > 0 && current.litros) {
+                allVehicleRecords[i].consumo = ((current.litros / distancia) * 100).toFixed(2);
+            } else {
+                allVehicleRecords[i].consumo = '--';
+            }
+        }
+    }
+    
+    // PASO 4: AHORA filtrar por año (después de calcular consumo)
+    let filteredRecords = allVehicleRecords;
     if (filterYearRepostajes !== 'all') {
-        vehicleRecords = vehicleRecords.filter(r => {
+        filteredRecords = allVehicleRecords.filter(r => {
             if (!r.fecha) return false;
             const year = new Date(r.fecha).getFullYear();
             return year == filterYearRepostajes;
         });
     }
     
-    vehicleRecords.sort((a, b) => (b.km_actuales || 0) - (a.km_actuales || 0));
-    
-    // Calculate KM gastados and consumo for each record
-    for (let i = 0; i < vehicleRecords.length; i++) {
-        if (i < vehicleRecords.length - 1) {
-            const current = vehicleRecords[i];
-            const previous = vehicleRecords[i + 1];
-            const kmGastados = (current.km_actuales || 0) - (previous.km_actuales || 0);
-            vehicleRecords[i].km_gastados = kmGastados;
-            if (kmGastados > 0 && current.litros) {
-                vehicleRecords[i].consumo = ((current.litros / kmGastados) * 100).toFixed(2);
-            }
-        }
-    }
+    // Ordenar para mostrar (de mayor a menor km - los más recientes arriba)
+    filteredRecords.sort((a, b) => (b.km_actuales || 0) - (a.km_actuales || 0));
     
     // Year filter HTML
     const filterHtml = `
@@ -380,11 +393,11 @@ async function loadRepostajes() {
             <select onchange="filterYearRepostajes = this.value; loadRepostajes();">
                 ${getYearFilterOptions(filterYearRepostajes)}
             </select>
-            <span class="filter-count">${vehicleRecords.length} registros</span>
+            <span class="filter-count">${filteredRecords.length} registros</span>
         </div>
     `;
     
-    if (vehicleRecords.length === 0 && filterYearRepostajes === 'all') {
+    if (filteredRecords.length === 0 && filterYearRepostajes === 'all') {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">⛽</div>
@@ -395,11 +408,12 @@ async function loadRepostajes() {
         return;
     }
     
-    const listHtml = vehicleRecords.length === 0 
+    const listHtml = filteredRecords.length === 0 
         ? `<div class="empty-state small"><div class="empty-state-text">No hay datos en ${filterYearRepostajes}</div></div>`
-        : vehicleRecords.map(r => {
+        : filteredRecords.map(r => {
             // Calculate price per liter for display
             const precioLitro = (r.litros && r.litros > 0) ? (r.total_euros / r.litros).toFixed(3) : (r.precio_litro || 0).toFixed(3);
+            const consumoDisplay = r.consumo === '--' ? '--' : `${r.consumo} L/100km`;
             return `
         <div class="list-item repostaje-item" onclick="editRepostaje(${r.id})">
             <div class="list-item-main">
@@ -409,7 +423,7 @@ async function loadRepostajes() {
             <div class="list-item-data">
                 <div class="list-item-amount">${(r.total_euros || 0).toFixed(2)} €</div>
                 <div class="list-item-detail">${(r.litros || 0).toFixed(2)} L · ${precioLitro} €/L</div>
-                ${r.consumo ? `<div class="list-item-consumo">${r.consumo} L/100km</div>` : ''}
+                <div class="list-item-consumo">${consumoDisplay}</div>
             </div>
             <button class="list-item-delete" onclick="event.stopPropagation(); deleteRepostaje(${r.id})">🗑️</button>
         </div>
