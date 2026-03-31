@@ -668,11 +668,13 @@ function calcularTotalRepostaje() {
     const totalEurosInput = document.getElementById('total_euros');
     
     if (importeBrutoInput) {
-        importeBrutoInput.value = importeBruto.toFixed(2);
+        importeBrutoInput.value = (Math.trunc(importeBruto * 100) / 100).toFixed(2);
     }
+    
     if (totalEurosInput) {
-        totalEurosInput.value = totalPagado.toFixed(2);
+        totalEurosInput.value = (Math.trunc(totalPagado * 100) / 100).toFixed(2);
     }
+
 }
 
 async function saveRepostaje(event) {
