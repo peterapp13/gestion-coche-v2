@@ -995,6 +995,50 @@ async function deleteTaller(id) {
         await loadTaller();
         loadEstadisticas();
     }
+} {
+            almacenItem.cantidad_comprada = 0;
+            almacenItem.estado = 'Agotado/Instalado';
+        }
+        
+        await updateRecord('almacen', almacenItem);
+    } else {
+        alert('Debes seleccionar un recambio del almacén');
+        return;
+    }
+    
+    const data = {
+        matricula: activeVehicle, // BIND TO ACTIVE VEHICLE
+        fecha_montaje: formData.get('fecha_montaje'),
+        km_montaje: parseFloat(formData.get('km_montaje')),
+        recambio_instalado: recambioNombre,
+        almacen_id: almacenId ? parseInt(almacenId) : null,
+        cantidad_usada: cantidadUsada,
+        notas: formData.get('notas') || ''
+    };
+    
+    if (editingId) {
+        data.id = editingId;
+        await updateRecord('taller', data);
+    } else {
+        await addRecord('taller', data);
+    }
+    
+    closeModal();
+    await loadTaller();
+    await loadAlmacen(); // Reload almacén to show updated quantities
+    loadEstadisticas();
+}
+
+async function editTaller(id) {
+    await showTallerForm(id);
+}
+
+async function deleteTaller(id) {
+    if (confirm('¿Estás seguro de que quieres eliminar este trabajo?')) {
+        await deleteRecord('taller', id);
+        await loadTaller();
+        loadEstadisticas();
+    }
 }
 
 // ===== OTROS GASTOS =====
