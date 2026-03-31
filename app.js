@@ -522,7 +522,7 @@ async function loadRepostajes() {
             const kmRecorridos = r.km_gastados > 0 ? `+${r.km_gastados} km` : '';
             
             // Indicator for full tank or partial
-            const tanqueIcon = r.esTanqueLleno ? '⛽' : '½';
+            const tanqueIcon = r.esTanqueLleno ? '⛽' : '🔸';
             
             return `
         <div class="list-item repostaje-item" onclick="editRepostaje(${r.id})">
