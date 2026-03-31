@@ -769,14 +769,18 @@ async function loadTaller() {
             if (r.recambios && Array.isArray(r.recambios) && r.recambios.length > 0) {
                 // New format: multiple parts
                 partsCount = r.recambios.length;
-                displayTitle = r.recambios.map(p => p.nombre).join(', ');
-                if (displayTitle.length > 35) {
-                    displayTitle = displayTitle.substring(0, 32) + '...';
+                if (partsCount > 1) {
+                    displayTitle = 'Varios recambios';
+                } else {
+                    displayTitle = r.recambios[0].nombre || 'Sin nombre';
                 }
             } else {
                 // Old format: single part
                 displayTitle = r.recambio_instalado || 'Sin nombre';
             }
+            
+            // Escape notes for HTML attribute
+            const escapedNotes = r.notas ? r.notas.replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
             
             return `
         <div class="list-item" onclick="editTaller(${r.id})">
@@ -787,7 +791,7 @@ async function loadTaller() {
             </div>
             <div class="list-item-data">
                 <div class="list-item-amount">${r.cantidad_usada || (r.recambios ? r.recambios.reduce((sum, p) => sum + (p.cantidad || 1), 0) : 1)} uds</div>
-                <div class="list-item-detail">${r.notas ? '📝' : ''}</div>
+                ${r.notas ? `<button class="btn-show-note" onclick="event.stopPropagation(); showTallerNote('${escapedNotes}')" title="Ver nota">📝</button>` : ''}
             </div>
             <button class="list-item-delete" onclick="event.stopPropagation(); deleteTaller(${r.id})">🗑️</button>
         </div>
@@ -961,10 +965,13 @@ function updateTallerDropdownsStock(returnedAlmacenId, returnedQty) {
     const allSelects = document.querySelectorAll('#lista-recambios .part-select:not(:disabled)');
     
     allSelects.forEach(select => {
+        let optionFound = false;
+        
         // Find the option for this almacen_id and update its stock display
         for (let i = 0; i < select.options.length; i++) {
             const option = select.options[i];
             if (option.value == returnedAlmacenId) {
+                optionFound = true;
                 const currentMax = parseInt(option.getAttribute('data-max')) || 0;
                 const newMax = currentMax + returnedQty;
                 option.setAttribute('data-max', newMax);
@@ -973,23 +980,36 @@ function updateTallerDropdownsStock(returnedAlmacenId, returnedQty) {
                 const text = option.textContent;
                 const newText = text.replace(/Stock: \d+/, `Stock: ${newMax}`);
                 option.textContent = newText;
+                break;
+            }
+        }
+        
+        // If option not found (part was out of stock), add it
+        if (!optionFound && window.tallerAllParts) {
+            const fullPart = window.tallerAllParts.find(p => p.id == returnedAlmacenId);
+            if (fullPart) {
+                const newOption = document.createElement('option');
+                newOption.value = fullPart.id;
+                newOption.setAttribute('data-max', returnedQty);
+                newOption.textContent = `${fullPart.recambio} (${fullPart.marca}) - Stock: ${returnedQty}`;
+                select.appendChild(newOption);
             }
         }
     });
     
-    // Also update the global available parts for new rows
+    // Also update the global available parts for new rows (avoid duplicates)
     if (window.tallerAvailableParts) {
-        const part = window.tallerAvailableParts.find(p => p.id == returnedAlmacenId);
-        if (part) {
-            part.cantidad_comprada += returnedQty;
+        const existingPart = window.tallerAvailableParts.find(p => p.id == returnedAlmacenId);
+        if (existingPart) {
+            existingPart.cantidad_comprada += returnedQty;
         } else {
-            // Part might have been out of stock, need to add it back
+            // Part was out of stock, need to add it back (create a copy to avoid reference issues)
             const allParts = window.tallerAllParts || [];
             const fullPart = allParts.find(p => p.id == returnedAlmacenId);
             if (fullPart) {
-                fullPart.cantidad_comprada += returnedQty;
-                fullPart.estado = 'En Stock';
-                window.tallerAvailableParts.push(fullPart);
+                // Create a copy with updated stock
+                const newPart = { ...fullPart, cantidad_comprada: returnedQty, estado: 'En Stock' };
+                window.tallerAvailableParts.push(newPart);
             }
         }
     }
@@ -1166,6 +1186,24 @@ async function deleteTaller(id) {
         await loadTaller();
         loadEstadisticas();
     }
+}
+
+// Show note in a modal popup
+function showTallerNote(note) {
+    const modal = document.getElementById('modal');
+    const modalBody = document.getElementById('modal-body');
+    
+    modalBody.innerHTML = `
+        <h2 class="form-title">📝 Nota del Trabajo</h2>
+        <div class="note-display">
+            <p>${note.replace(/\n/g, '<br>')}</p>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn-primary" onclick="closeModal()">Cerrar</button>
+        </div>
+    `;
+    
+    modal.classList.add('show');
 }
 
 // ===== OTROS GASTOS =====

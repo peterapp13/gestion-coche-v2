@@ -1536,3 +1536,36 @@ body {
     opacity: 0.7;
     background: #2A2A2A;
 }
+
+/* Button to show note */
+.btn-show-note {
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.btn-show-note:active {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(0.95);
+}
+
+/* Note display in modal */
+.note-display {
+    background: #1A1A1A;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+    line-height: 1.6;
+    color: #E5E5E5;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.note-display p {
+    margin: 0;
+    white-space: pre-wrap;
+}
