@@ -707,7 +707,7 @@ async function deleteAlmacen(id) {
     }
 }
 
-// ===== TALLER =====
+// ===== TALLER (MULTIPLE PARTS SUPPORT) =====
 async function loadTaller() {
     const container = document.getElementById('taller-list');
     if (!container) return;
@@ -761,19 +761,37 @@ async function loadTaller() {
     
     const listHtml = vehicleRecords.length === 0
         ? `<div class="empty-state small"><div class="empty-state-text">No hay datos en ${filterYearTaller}</div></div>`
-        : vehicleRecords.map(r => `
+        : vehicleRecords.map(r => {
+            // Handle both old format (single recambio_instalado) and new format (recambios array)
+            let displayTitle = '';
+            let partsCount = 1;
+            
+            if (r.recambios && Array.isArray(r.recambios) && r.recambios.length > 0) {
+                // New format: multiple parts
+                partsCount = r.recambios.length;
+                displayTitle = r.recambios.map(p => p.nombre).join(', ');
+                if (displayTitle.length > 35) {
+                    displayTitle = displayTitle.substring(0, 32) + '...';
+                }
+            } else {
+                // Old format: single part
+                displayTitle = r.recambio_instalado || 'Sin nombre';
+            }
+            
+            return `
         <div class="list-item" onclick="editTaller(${r.id})">
             <div class="list-item-main">
-                <div class="list-item-title">${r.recambio_instalado || 'Sin nombre'}</div>
-                <div class="list-item-subtitle">${r.fecha_montaje || 'Sin fecha'} · ${(r.km_montaje || 0).toLocaleString()} km</div>
+                <div class="list-item-title">${displayTitle}</div>
+                <div class="list-item-subtitle">${r.fecha_montaje || 'Sin fecha'} · <span class="km-total">${(r.km_montaje || 0).toLocaleString()} km</span></div>
+                ${partsCount > 1 ? `<div class="list-item-parts">${partsCount} recambios</div>` : ''}
             </div>
             <div class="list-item-data">
-                <div class="list-item-amount">${r.cantidad_usada || 1} uds</div>
+                <div class="list-item-amount">${r.cantidad_usada || (r.recambios ? r.recambios.reduce((sum, p) => sum + (p.cantidad || 1), 0) : 1)} uds</div>
                 <div class="list-item-detail">${r.notas ? '📝' : ''}</div>
             </div>
             <button class="list-item-delete" onclick="event.stopPropagation(); deleteTaller(${r.id})">🗑️</button>
         </div>
-    `).join('');
+    `}).join('');
     
     container.innerHTML = filterHtml + `<div class="list-container">${listHtml}</div>`;
 }
@@ -795,6 +813,9 @@ async function showTallerForm(id = null) {
         item.estado === 'En Stock'
     );
     
+    // Store available parts globally for adding new rows
+    window.tallerAvailableParts = availableParts;
+    
     if (id) {
         getRecord('taller', id).then(record => {
             openTallerModal(title, record, availableParts);
@@ -808,9 +829,20 @@ function openTallerModal(title, data = {}, availableParts = []) {
     const modal = document.getElementById('modal');
     const modalBody = document.getElementById('modal-body');
     
-    const partsOptions = availableParts.map(part => 
-        `<option value="${part.id}" data-max="${part.cantidad_comprada}">${part.recambio} (${part.marca}) - Stock: ${part.cantidad_comprada}</option>`
-    ).join('');
+    // Prepare initial parts data for editing
+    let initialParts = [];
+    if (data.recambios && Array.isArray(data.recambios) && data.recambios.length > 0) {
+        // New format: multiple parts
+        initialParts = data.recambios;
+    } else if (data.almacen_id) {
+        // Old format: single part - convert to array format for editing
+        initialParts = [{ almacen_id: data.almacen_id, cantidad: data.cantidad_usada || 1 }];
+    }
+    
+    // Generate initial parts rows HTML
+    const partsRowsHtml = initialParts.length > 0 
+        ? initialParts.map((part, index) => createPartRowHtml(index, availableParts, part, index === 0)).join('')
+        : createPartRowHtml(0, availableParts, {}, true);
     
     modalBody.innerHTML = `
         <h2 class="form-title">${title}</h2>
@@ -823,18 +855,19 @@ function openTallerModal(title, data = {}, availableParts = []) {
                 <label class="form-label">KM del Vehículo</label>
                 <input type="number" class="form-input" name="km_montaje" value="${data.km_montaje || ''}" required>
             </div>
-            <div class="form-group">
-                <label class="form-label">Recambio Instalado</label>
-                <select class="form-select" name="almacen_id" id="almacen_select" onchange="updateQuantityMax()" ${availableParts.length === 0 ? 'disabled' : ''}>
-                    <option value="">-- Selecciona del almacén --</option>
-                    ${partsOptions}
-                </select>
-                ${availableParts.length === 0 ? '<p style="color: #F59E0B; font-size: 14px; margin-top: 8px;">No hay piezas disponibles en stock</p>' : ''}
+            
+            <div class="form-section">
+                <label class="form-label">Recambios Instalados</label>
+                <div id="lista-recambios">
+                    ${partsRowsHtml}
+                </div>
+                ${availableParts.length > 0 ? `
+                <button type="button" class="btn-add-part" onclick="addTallerPartRow()">
+                    + Añadir otro recambio
+                </button>
+                ` : '<p style="color: #F59E0B; font-size: 14px; margin-top: 8px;">No hay piezas disponibles en stock</p>'}
             </div>
-            <div class="form-group">
-                <label class="form-label">Cantidad Usada</label>
-                <input type="number" min="1" step="1" class="form-input" name="cantidad_usada" id="cantidad_usada" value="${data.cantidad_usada || 1}" required>
-            </div>
+            
             <div class="form-group">
                 <label class="form-label">Notas Técnicas (Opcional)</label>
                 <textarea class="form-textarea" name="notas" placeholder="Detalles del trabajo realizado...">${data.notas || ''}</textarea>
@@ -849,12 +882,42 @@ function openTallerModal(title, data = {}, availableParts = []) {
     modal.classList.add('show');
 }
 
-function updateQuantityMax() {
-    const select = document.getElementById('almacen_select');
-    const quantityInput = document.getElementById('cantidad_usada');
+function createPartRowHtml(index, availableParts, partData = {}, isFirst = false) {
+    const partsOptions = availableParts.map(part => 
+        `<option value="${part.id}" data-max="${part.cantidad_comprada}" ${partData.almacen_id == part.id ? 'selected' : ''}>${part.recambio} (${part.marca}) - Stock: ${part.cantidad_comprada}</option>`
+    ).join('');
     
-    if (select.value) {
-        const selectedOption = select.options[select.selectedIndex];
+    return `
+        <div class="part-row" data-index="${index}">
+            <select class="form-select part-select" onchange="updatePartQuantityMax(this)">
+                <option value="">-- Selecciona --</option>
+                ${partsOptions}
+            </select>
+            <input type="number" min="1" step="1" class="form-input part-quantity" value="${partData.cantidad || 1}" placeholder="Cant.">
+            ${!isFirst ? `<button type="button" class="btn-remove-part" onclick="removeTallerPartRow(this)">✕</button>` : '<div class="part-spacer"></div>'}
+        </div>
+    `;
+}
+
+function addTallerPartRow() {
+    const container = document.getElementById('lista-recambios');
+    const availableParts = window.tallerAvailableParts || [];
+    const newIndex = container.querySelectorAll('.part-row').length;
+    const newRowHtml = createPartRowHtml(newIndex, availableParts, {}, false);
+    container.insertAdjacentHTML('beforeend', newRowHtml);
+}
+
+function removeTallerPartRow(button) {
+    const row = button.closest('.part-row');
+    row.remove();
+}
+
+function updatePartQuantityMax(selectElement) {
+    const row = selectElement.closest('.part-row');
+    const quantityInput = row.querySelector('.part-quantity');
+    
+    if (selectElement.value) {
+        const selectedOption = selectElement.options[selectElement.selectedIndex];
         const maxQuantity = selectedOption.getAttribute('data-max');
         quantityInput.max = maxQuantity;
     } else {
@@ -873,48 +936,70 @@ async function saveTaller(event) {
     const form = event.target;
     const formData = new FormData(form);
     
-    const almacenId = formData.get('almacen_id');
-    const cantidadUsada = parseFloat(formData.get('cantidad_usada'));
+    // Collect all parts from dynamic rows
+    const partRows = document.querySelectorAll('#lista-recambios .part-row');
+    const recambios = [];
+    let totalCantidad = 0;
+    let recambioNames = [];
     
-    let recambioNombre = '';
+    for (const row of partRows) {
+        const selectEl = row.querySelector('.part-select');
+        const quantityEl = row.querySelector('.part-quantity');
+        
+        const almacenId = selectEl.value;
+        const cantidad = parseInt(quantityEl.value) || 1;
+        
+        if (almacenId) {
+            const almacenItem = await getRecord('almacen', parseInt(almacenId));
+            
+            if (!almacenItem) {
+                alert('Error: No se encontró uno de los recambios seleccionados');
+                return;
+            }
+            
+            if (almacenItem.cantidad_comprada < cantidad) {
+                alert(`Error: No hay suficiente stock de "${almacenItem.recambio}". Disponible: ${almacenItem.cantidad_comprada}, Solicitado: ${cantidad}`);
+                return;
+            }
+            
+            recambios.push({
+                almacen_id: parseInt(almacenId),
+                nombre: `${almacenItem.recambio} (${almacenItem.marca})`,
+                cantidad: cantidad
+            });
+            
+            recambioNames.push(`${almacenItem.recambio} (${almacenItem.marca})`);
+            totalCantidad += cantidad;
+        }
+    }
     
-    if (almacenId) {
-        const almacenItem = await getRecord('almacen', parseInt(almacenId));
+    if (recambios.length === 0) {
+        alert('Debes seleccionar al menos un recambio del almacén');
+        return;
+    }
+    
+    // Now subtract quantities from almacén for each part
+    for (const recambio of recambios) {
+        const almacenItem = await getRecord('almacen', recambio.almacen_id);
         
-        if (!almacenItem) {
-            alert('Error: No se encontró el recambio seleccionado');
-            return;
-        }
+        almacenItem.cantidad_comprada -= recambio.cantidad;
         
-        if (almacenItem.cantidad_comprada < cantidadUsada) {
-            alert(`Error: No hay suficiente stock. Disponible: ${almacenItem.cantidad_comprada}, Solicitado: ${cantidadUsada}`);
-            return;
-        }
-        
-        recambioNombre = `${almacenItem.recambio} (${almacenItem.marca})`;
-        
-        // Subtract quantity from almacén
-        almacenItem.cantidad_comprada -= cantidadUsada;
-        
-        // Update status if quantity reaches zero
         if (almacenItem.cantidad_comprada <= 0) {
             almacenItem.cantidad_comprada = 0;
             almacenItem.estado = 'Agotado/Instalado';
         }
         
         await updateRecord('almacen', almacenItem);
-    } else {
-        alert('Debes seleccionar un recambio del almacén');
-        return;
     }
     
     const data = {
-        matricula: activeVehicle, // BIND TO ACTIVE VEHICLE
+        matricula: activeVehicle,
         fecha_montaje: formData.get('fecha_montaje'),
         km_montaje: parseFloat(formData.get('km_montaje')),
-        recambio_instalado: recambioNombre,
-        almacen_id: almacenId ? parseInt(almacenId) : null,
-        cantidad_usada: cantidadUsada,
+        recambios: recambios,
+        // Keep backward compatibility fields
+        recambio_instalado: recambioNames.join(', '),
+        cantidad_usada: totalCantidad,
         notas: formData.get('notas') || ''
     };
     
@@ -927,7 +1012,7 @@ async function saveTaller(event) {
     
     closeModal();
     await loadTaller();
-    await loadAlmacen(); // Reload almacén to show updated quantities
+    await loadAlmacen();
     loadEstadisticas();
 }
 
